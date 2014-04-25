@@ -167,7 +167,9 @@ prepare_interface() {
 
 		# make sure the interface is removed from any existing bridge and deconfigured,
 		# (deconfigured only if the interface is not set to proto=none)
-		unbridge "$iface"
+		if [ "$proto" != none ]; then
+			unbridge "$iface"
+		fi
 		[ "$proto" = none ] || ifconfig "$iface" 0.0.0.0
 
 		# Change interface MAC address if requested
