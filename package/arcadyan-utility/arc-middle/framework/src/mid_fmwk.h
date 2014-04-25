@@ -10,14 +10,6 @@
 #define _mid_fmwk_h_
 
 //#define MID_DEBUG
-#define MID_MSG(...) \
-	do \
-	{ \
-		FILE *fp; \
-		fp = fopen("/dev/console", "w"); \
-		fprintf(fp, __VA_ARGS__); \
-		fclose(fp); \
-	} while (0)
 
 #ifdef MID_DEBUG
  #define MID_DBG(msg) \

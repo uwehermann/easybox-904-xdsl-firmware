@@ -41,7 +41,6 @@ typedef	signed long		I32;
 typedef	unsigned char	U8;
 typedef	unsigned short	U16;
 typedef	unsigned long	U32;
-typedef	unsigned long long	U64;
 typedef	unsigned int	Uint;
 
 

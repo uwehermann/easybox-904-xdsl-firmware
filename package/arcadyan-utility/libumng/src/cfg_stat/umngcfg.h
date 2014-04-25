@@ -21,13 +21,6 @@
 //#include <linux/limits.h>
 #include <arpa/inet.h>
 
-#define SECT_HASH
-#ifdef SECT_HASH
-#define SECT_NUM_PER_HASH_ENTRY     16
-#define SECT_HASH_TBL_MASK          0x3f
-#define SECT_HASH_TBL_SZ            64
-#endif
-
 #define NO_SECTION  "DFT_SECTION"
 
 #define UMNGCFG_MAX_SECTION_NUM		256
@@ -95,9 +88,7 @@ typedef struct umngcfg_handle {
 	char *section[UMNGCFG_MAX_SECTION_NUM];
 	char *comment[UMNGCFG_MAX_SECTION_NUM];
 	struct umngcfg_tuple *umngcfg_section[UMNGCFG_MAX_SECTION_NUM];
-#ifdef SECT_HASH
-    int sect_hash[SECT_HASH_TBL_SZ][SECT_NUM_PER_HASH_ENTRY];
-#endif
+	struct umngcfg_tuple *umngcfg_dead;
 } umngcfg_handle_t;
 
 // open umngcfg config file and obtain a handle
@@ -112,6 +103,7 @@ int		umngcfg_get_varidx(umngcfg_handle_t *h, int sec_idx, char* var);
 // set the value of a umngcfg variable
 int		umngcfg_set(umngcfg_handle_t *h, const char *section, const char *name, const char *value);
 int		umngcfg_set_by_idx(umngcfg_handle_t *h, const char *section, const char *name, const char *value, const int idx);
+int		umngcfg_set_comment(umngcfg_handle_t *h, const char *section, const char *name, const char *comment);
 
 // get the value of a umngcfg variable, return NULL if it it is not found
 char*	umngcfg_get(umngcfg_handle_t *h, const char *section, const char *name);
@@ -182,13 +174,6 @@ int   umngcfg_get_varnum(umngcfg_handle_t *h, int sec_idx);
 char* umngcfg_get_varname(umngcfg_handle_t *h, int sec_idx, int var_idx);
 int   umngcfg_get_varidx(umngcfg_handle_t *h, int sec_idx, char* var);
 int   umngcfg_import( umngcfg_handle_t *h, char* srcCfg, int iType, char* imList);
-
-int umngcfg_delete(umngcfg_handle_t *h, const char *DelList);
-int umngcfg_commit_whitelist(umngcfg_handle_t *h);
-int umngcfg_merge_whitelist(umngcfg_handle_t *h, const char *SrcWL);
-int	umngcfg_config_filter(umngcfg_handle_t *h, const char* ruleList, const char *predef_rule, const unsigned int val_len_lmt);
-
-int	umngcfg_get_whole_section(umngcfg_handle_t *h, const char *section, void *data_ptr, void *mem_bound);
 
 int   indexOfC(char* str, const char delimiter, const int num);
 int   getListSize(char *srcList, char delimiter);

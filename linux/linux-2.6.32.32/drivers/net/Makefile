@@ -288,3 +288,6 @@ obj-$(CONFIG_SFC) += sfc/
 obj-$(CONFIG_WIMAX) += wimax/
 
 -include $(srctree)/drivers/net/Makefile.ifx
+
+#RTL8367 plaform specific, ctc
+-include $(srctree)/drivers/net/Makefile.rtl

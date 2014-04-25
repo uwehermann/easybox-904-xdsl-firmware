@@ -1,0 +1,34 @@
+#
+# Realtek device configuration
+#
+
+config RTL8367RB
+         tristate "Realtek 8367RB gigabit ethernet support"
+         depends on NET_VENDOR_REALTEK
+         default y
+         ---help---
+           Say Y here if you have a Realtek 8367 Gigabit Ethernet Switch.
+
+if RTL8367RB
+
+#config RTL8367RB_IOCTL_DBG
+#         tristate "Realtek 8367RB ioctl debug"
+#         default y
+
+choice
+		prompt "APIs version support"
+			depends on RTL8367RB
+			default RTL8367RB_APIs_v1_2_10
+
+		config RTL8367RB_APIs_v1_2_10
+			bool "Switch API v1.2.10 support"
+			---help---
+		  		Unmanaged switch APIs driver v1.2.10 release.
+
+		config RTL8367RB_APIs_v1_2_11
+			bool "Switch API v1.2.11 support"
+			---help---
+		  		Unmanaged switch APIs driver v1.2.11 release.
+endchoice
+
+endif # RTL8367RB

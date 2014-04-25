@@ -1,17 +1,6 @@
-
 #include <stdio.h>
 #include <string.h>
 #include "libArcComApi.h"
-
-
-static char _gsDbFileName[ CFG_DB_MAX ][ CFG_DB_NAMELEN_MAX ] = {
-				  "/etc/config/.glbcfg"
-				, "/etc/config/glbcfg.dft"
-				, "/tmp/fs/drvstat"
-				, "/tmp/fs/diskinfo"
-				, "/tmp/fs/volinfo"
-			};
-
 
 /*******************************************************************************
  * Description
@@ -86,99 +75,6 @@ long cfgDataSet( char* sFile, char* sSect, char* sKey, char* sData )
 		return ARC_COM_ERROR;
 
 	return ARC_COM_OK;
-}
-
-/*******************************************************************************
- * Description
- *		get the corresponding system database file name according to its ID
- *
- * Parameters
- *		iDbId:		system database file ID, CFG_DATABASE_MIN ~ CFG_DATABASE_MAX.
- *		sBuf:		pointer to be filled with corresponding system database file name. It can be NULL.
- *
- * Returns
- *		* ARC_COM_NULL(0):	iDbId is out of range
- *		* others:			pointer to corresponding system database file name
- *
- * Note
- *		* sBuf size MUST be at least CFG_DB_NAMELEN_MAX if it is not NULL.
- *
- ******************************************************************************/
-char* cfgDbName( int iDbId, char* sBuf )
-{
-	static char	sFn[ CFG_DB_NAMELEN_MAX ];
-
-	if ( ! CFG_DB_VALID( iDbId ) )
-		return ARC_COM_NULL;
-
-	if (sBuf == ARC_COM_NULL)
-	{
-		sFn[ sizeof(sFn)-1 ] = '\0';
-		strncpy( sFn, _gsDbFileName[ iDbId - CFG_DB_MIN ], sizeof(sFn)-1 );
-		return sFn;
-	}
-	else
-	{
-		strncpy( sBuf, _gsDbFileName[ iDbId - CFG_DB_MIN ], sizeof(sFn)-1 );
-		return sBuf;
-	}
-}
-
-/*******************************************************************************
- * Description
- *		get a configuration data from a system database file
- *
- * Parameters
- *		iDbId:		system database file ID, CFG_DATABASE_MIN ~ CFG_DATABASE_MAX.
- *		sSect:		section name of key-value pair.
- *		sKey:		key name of key-value pair.
- *		sDataBuf:	buffer to be filled with returned data value.
- *		iDataLen:	length of sDataBuf.
- *
- * Returns
- *		* ARC_COM_OK(0):		successfully
- *		* ARC_COM_ERROR(-1):	failed
- *
- * See Also
- *		cfgDbName, cfgDataGet, cfgDbDataSet
- *
- ******************************************************************************/
-long cfgDbDataGet( int iDbId, char* sSect, char* sKey, char* sDataBuf, int iDataLen )
-{
-	char	sDbName[ CFG_DB_NAMELEN_MAX ];
-
-	if ( cfgDbName( iDbId, sDbName ) == ARC_COM_NULL )
-		return ARC_COM_ERROR;
-
-	return cfgDataGet( sDbName, sSect, sKey, sDataBuf, iDataLen );
-}
-
-/*******************************************************************************
- * Description
- *		set a configuration data into a database file
- *
- * Parameters
- *		iDbId:	system database file ID, CFG_DATABASE_MIN ~ CFG_DATABASE_MAX.
- *		sSect:	section name of key-value pair.
- *		sKey:	key name of key-value pair.
- *		sData:	new data value.
- *
- * Returns
- *		* ARC_COM_OK(0):		successfully
- *		* ARC_COM_ERROR(-1):	failed
- *
- * See Also
- *		cfgDbName, cfgDataSet, cfgDbDataGet
- *
- ******************************************************************************/
-long cfgDbDataSet( int iDbId, char* sSect, char* sKey, char* sData )
-{
-	char	sDbName[ CFG_DB_NAMELEN_MAX ];
-
-	if ( cfgDbName( iDbId, sDbName ) == ARC_COM_NULL )
-		return ARC_COM_ERROR;
-
-	return cfgDataSet( sDbName, sSect, sKey, sData );
 }
 
 /*******************************************************************************

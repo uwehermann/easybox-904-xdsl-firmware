@@ -41,10 +41,6 @@ extern "C" {
 extern long		cfgDataGet( char* sFile, char* sSect, char* sKey, char* sDataBuf, int iDataLen );
 extern long		cfgDataSet( char* sFile, char* sSect, char* sKey, char* sData );
 
-extern char*	cfgDbName( int iDbId, char* sBuf );
-extern long		cfgDbDataGet( int iDbId, char* sSect, char* sKey, char* sDataBuf, int iDataLen );
-extern long		cfgDbDataSet( int iDbId, char* sSect, char* sKey, char* sData );
-
 extern long		cfgWanIfName( char* sDataBuf, int iDataLen );
 extern long		cfgWanIfSect( char* sDataBuf, int iDataLen );
 

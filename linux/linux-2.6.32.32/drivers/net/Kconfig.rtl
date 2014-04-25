@@ -1,0 +1,5 @@
+#
+# Ethernet LAN device configuration for RealTek
+#
+
+source "drivers/net/rtl8367_switch_api/Kconfig"

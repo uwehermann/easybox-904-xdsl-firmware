@@ -2921,6 +2921,9 @@ config XEN_NETDEV_FRONTEND
 
 source "drivers/net/Kconfig.ifx"
 
+#RTL8367 switch, ctc
+source "drivers/net/Kconfig.rtl"
+
 config ISERIES_VETH
 	tristate "iSeries Virtual Ethernet driver support"
 	depends on PPC_ISERIES

@@ -13,7 +13,7 @@
 
 #define MID_MODULE_INI_SUPPORT
 
-#define MID_REG_MODULE_DIR  "/etc/arc-middle/register"   //the module-register dir
+#define MID_REG_MODULE_DIR  "/etc/config/arc-middle/register"   //the module-register dir
 #define MID_REG_MODULE_LIB_NAME_MAXLEN  128
 #define MID_REG_MODULE_FUN_NAME_MAXLEN  64
 #define MID_REG_TABLE_SIZE              MID_MAX_MODULE_NUM
