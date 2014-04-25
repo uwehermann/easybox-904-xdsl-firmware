@@ -655,16 +655,25 @@ upgrade_fullimage_nor_or_nand()
 # $2 - image ID, 1: primary, 2: secondary
 upgrade_fullimage()
 {
-	if [ -z "$1" ] || ! [ -f "$1" ] ; then
-		return 1
+	imgFile=/tmp/fwUpgrade/$(basename $1);
+	if [ -f $1 ] ; then
+	    # should be in /tmp if called from CGI
+	    imgFile=$1;
 	fi
+	if [ ! -f $imgFile ] ; then
+	    imgFile=/tmp/usb/misc/fwUpgrade/$(basename $1);
+	fi
+
+#	if [ -z "$1" ] || ! [ -f "$1" ] ; then
+#		return 1
+#	fi
 
 	if [ $DUAL_IMAGE != 1 ] && [ "$2" == "2" ] ; then
 		return 2
 	fi
 
 	ulog "msg" "Upgrade Firmware from `uboot_env --get --name sw_version` on `date`" 1
-	upgrade_fullimage_nor_or_nand "$1" $2
+	upgrade_fullimage_nor_or_nand "$imgFile" $2
 	# upgrade_fullimage_legacy "$1" $2
 	
 	# For saving the ulog to flash
