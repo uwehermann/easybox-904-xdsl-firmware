@@ -1,0 +1,49 @@
+#!/bin/sh
+
+echo "Env $ENVLOADED" > /dev/null
+if [ ! "$ENVLOADED" ]; then
+        if [ -r /etc/rc.conf ]; then
+                 . /etc/rc.conf 2> /dev/null
+                ENVLOADED="1"
+        fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+        if [ -r /etc/rc.d/config.sh ]; then
+                . /etc/rc.d/config.sh 2>/dev/null
+                CONFIGLOADED="1"
+        fi
+fi
+
+        i_1=0
+        while [ $i_1 -lt $lan_main_Count ]
+        do
+                        eval ip='$'lan_main_ipv6_${i_1}_ip6Addr
+                        eval pre_len='$'lan_main_ipv6_${i_1}_prefix_len
+                        eval iface='$'lan_main_ipv6_${i_1}_interface
+                        ip -6 addr add $ip/$pre_len dev $iface
+                        /usr/sbin/status_oper SET Lan_ipv6_IF_Info STATUS "UP" IP "$ip" PREFIXLEN "$pre_len"
+                i_1=`expr $i_1 + 1`
+        done
+
+        eval hn=`uname -n`'6'
+        echo "127.0.0.1 localhost.localdomain localhost"> /etc/hosts
+        echo "$lan_main_0_ipAddr ${hostname} `echo ${hostname} |cut -f1 -d'.'`" >> /etc/hosts
+        echo "$lan_main_ipv6_0_ip6Addr $hn.$lan_dhcpv6_dName  $hn" >> /etc/hosts
+        echo "HOSTS $lan_main_ipv6_0_ip6Addr $hn.$lan_dhcpv6_dName  $hn"
+
+        echo "IP configured for interface $iface"
+        # Setup Static Route
+
+        # Start DHCPv6 Server and radvd
+        if  [ "$CONFIG_PACKAGE_WIDE_DHCPV6" = "1" -o "$CONFIG_PACKAGE_RADVD" = "1" ]; then
+                i_1=0
+                eval inface='$'lan_radvd_interface
+                while [ $i_1 -lt $lan_main_Count ]
+                do
+                       # . /etc/rc.d/create_and_run_radvd start $inface $i_1
+                        . /etc/rc.d/create_and_run_radvd_lan
+                        . /etc/rc.d/create_and_run_dhcp6c_cfg serverstart $inface $i_1
+                	i_1=`expr $i_1 + 1`
+        	done
+        fi

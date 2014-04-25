@@ -1,0 +1,230 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+   <title> Questions for a dhclient using DHCPv6
+   </title>
+   <link rel="Index" href="https://lists.isc.org/pipermail/dhcp-users/2012-June/index.html">
+   <link rel="made" href="mailto:dhcp-users%40lists.isc.org?Subject=Re%3A%20Questions%20for%20a%20dhclient%20using%20DHCPv6&amp;In-Reply-To=%3C4FDEFAA5.6090303%40sdy.co.jp%3E">
+   <meta name="robots" content="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <meta http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <link rel="Previous" href="https://lists.isc.org/pipermail/dhcp-users/2012-June/015659.html">
+   <link rel="Next" href="https://lists.isc.org/pipermail/dhcp-users/2012-June/015617.html">
+ </head>
+ <body bgcolor="#ffffff">
+   <h1>Questions for a dhclient using DHCPv6</h1>
+    <b>k.fujinaga</b> 
+    <a href="mailto:dhcp-users%40lists.isc.org?Subject=Re%3A%20Questions%20for%20a%20dhclient%20using%20DHCPv6&amp;In-Reply-To=%3C4FDEFAA5.6090303%40sdy.co.jp%3E" title="Questions for a dhclient using DHCPv6">k.fujinaga at sdy.co.jp
+       </a><br>
+    <i>Mon Jun 18 09:53:41 UTC 2012</i>
+    <p></p><ul>
+        <li>Previous message: <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/015659.html">Questions for a dhclient using DHCPv6
+</a></li>
+        <li>Next message: <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/015617.html">How to configure the dhclient.conf to let it eventually accept an	OFFER even if no OFFERs satisfy the requirements?
+</a></li>
+         <li> <b>Messages sorted by:</b> 
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/date.html#15658">[ date ]</a>
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/thread.html#15658">[ thread ]</a>
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/subject.html#15658">[ subject ]</a>
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/author.html#15658">[ author ]</a>
+         </li>
+       </ul>
+    <hr>  
+<!--beginarticle-->
+<pre>HI, all.
+
+Does anyone know any ideas to solve problems?
+# My English is not good, so please be patient to read following questions.
+
+- Question 1.
+Can the dhclient set IPaddress to ethernet interface by using IA_PD mode?
+
+To get a IPv6 addresses, I tried to use the dhclient (isc-dhcp 4.2.4) on 
+ubuntsu 11.04.
+In my network, the DHCPv6 server requires IPv6 prefix delegation 
+mode(IA_PD).
+So, I executed the dhclient as follows.
+
+- command line
+# ./dhclient -d -6 -P -D LL
+              -cf /etc/dhcp/dhclient.conf
+              -lf /var/tmp/lease_file
+              -pf /var/tmp/pid_file
+              -sf /var/tmp/dhcp-4.2.4/client/scripts/linux
+              eth0
+             # I used 4.2.4's script file.
+
+- config file (/etc/dhcp/dhclient.conf)
+send dhcp6.reconf-accept;
+
+request dhcp6.vendor-opts,
+         dhcp6.sip-servers-addresses,
+         dhcp6.name-servers,
+         dhcp6.domain-search,
+         dhcp6.sntp-servers;
+
+The dhclient dhclient could communicate to DHCPv6 server, and got IA 
+prefix. But, the dhclient didn't set IP address to ethernet interface(eth0).
+
+If the "-P" option is used, the dhclient set an environment variable 
+"new_ip6_prefix" for the script file.
+But if "new_ip6_prefix" is defined, the 4.2.4's script file 
+(client/scripts/linux) do nothing as follows.
+
+ &gt; # client/scripts/linux line.263.
+ &gt; if [ x$reason = xBOUND6 ] ; then
+ &gt;   if [ x${new_ip6_address} = x ] || [ x${new_ip6_prefixlen} = x ] ; then
+ &gt;     exit_with_hooks 2;
+ &gt; fi
+
+Does anyone know how to solve this problem??
+
+- Question 2.
+
+In my network, the DHCP server requires "Option Request" option for 
+DHCPv6 messages except SOLICIT message.
+If the config setting is follows, the dhclient set "Option Request" 
+option to all DHCPv6 message.
+
+- config file (/etc/dhcp/dhclient.conf)
+request dhcp6.vendor-opts,
+         dhcp6.sip-servers-addresses,
+         dhcp6.name-servers,
+         dhcp6.domain-search,
+         dhcp6.sntp-servers;
+
+
+Please teach me the config setting to select target massage.
+
+Best regards
+Katsuhisa Fujinaga
+
+
+(2012/06/14 9:55), k.fujinaga wrote:
+&gt;<i> Sorry.
+</i>&gt;<i>
+</i>&gt;<i> Because an indent collapsed, it is hard to read the previous email.
+</i>&gt;<i> So, I re-send fixed email.
+</i>&gt;<i>
+</i>&gt;<i> ---
+</i>&gt;<i> Hi all,
+</i>&gt;<i>
+</i>&gt;<i> I have two questions for a dhclient using DHCPv6 (dhcp-4.2.4 on ubuntsu
+</i>&gt;<i> 11.04).
+</i>&gt;<i> Does anyone know answer of these questions.
+</i>&gt;<i>
+</i>&gt;<i> -- Q1. How can dhclient set IP address to ethernet using IA_PD mode?
+</i>&gt;<i>
+</i>&gt;<i> I tried to get IP address using IA_PD mode.
+</i>&gt;<i> The dhclient could communicate to DHCPv6 server, and got IA prefix.
+</i>&gt;<i> But, the dhclient didn't set IP address to ethernet.
+</i>&gt;<i> # So, ifconfig's outputs didn't change.
+</i>&gt;<i>
+</i>&gt;<i> The dhclient send/received solicit, advertise, request, reply messages.
+</i>&gt;<i> All message was correct, and the dhclient outputs lease file as follows.
+</i>&gt;<i>
+</i>&gt;<i> - lease file -
+</i>&gt;<i> default-duid "\000\003\000\001\000!\206+\0039"
+</i>&gt;<i> lease6 {
+</i>&gt;<i> interfase "eth0"
+</i>&gt;<i> ia-pd XX:XX:XX:XX { # sorry. address is masked.
+</i>&gt;<i> starts 1339469866;
+</i>&gt;<i> renew 7200;
+</i>&gt;<i> rebind 10800;
+</i>&gt;<i> iaprefix 2408:XXX:XXXX:XXX::/56 { # sorry. prefix is masked.
+</i>&gt;<i> starts 1339469866;
+</i>&gt;<i> preferred-life 12600;
+</i>&gt;<i> max-life 14400;
+</i>&gt;<i> }
+</i>&gt;<i> option dhcp6.client-id XXXXXXXXXXXXX; # masked.
+</i>&gt;<i> option dhcp6.server-id XXXXXXXXXXXXX; # masked.
+</i>&gt;<i> ...
+</i>&gt;<i> }
+</i>&gt;<i> --
+</i>&gt;<i>
+</i>&gt;<i> So, the dhclient could get IA prefix completely.
+</i>&gt;<i>
+</i>&gt;<i> The dhclient set environment variable "new_ip6_prefix" for script file.
+</i>&gt;<i> If "new_ip6_prefix" is defined, 4.2.4's script file
+</i>&gt;<i> (client/scripts/linux) do nothing.
+</i>&gt;<i>
+</i>&gt;<i>  &gt; # client/scripts/linux line.263.
+</i>&gt;<i>  &gt; if [ x$reason = xBOUND6 ] ; then
+</i>&gt;<i>  &gt; if [ x${new_ip6_address} = x ] || [ x${new_ip6_prefixlen} = x ] ; then
+</i>&gt;<i>  &gt; exit_with_hooks 2;
+</i>&gt;<i>  &gt; fi
+</i>&gt;<i> How can the dhclient set IP address to ethernet using IA_PD mode?
+</i>&gt;<i>
+</i>&gt;<i> Finally, I write more information.
+</i>&gt;<i> - command option
+</i>&gt;<i> # ./dhclient -d -6 -P -D LL
+</i>&gt;<i> -cf /etc/dhcp/dhclient.conf
+</i>&gt;<i> -lf /var/tmp/lease_file
+</i>&gt;<i> -pf /var/tmp/pid_file
+</i>&gt;<i> -sf /var/tmp/dhcp-4.2.4/client/scripts/linux
+</i>&gt;<i> eth0
+</i>&gt;<i> # I used 4.2.4's script file.
+</i>&gt;<i>
+</i>&gt;<i> - config file (/etc/dhcp/dhclient.conf)
+</i>&gt;<i> send dhcp6.reconf-accept;
+</i>&gt;<i>
+</i>&gt;<i> request dhcp6.vendor-opts,
+</i>&gt;<i> dhcp6.sip-servers-addresses,
+</i>&gt;<i> dhcp6.name-servers,
+</i>&gt;<i> dhcp6.domain-search,
+</i>&gt;<i> dhcp6.sntp-servers;
+</i>&gt;<i> --
+</i>&gt;<i>
+</i>&gt;<i> -- Q2. How can I select target message-type that is added IPv6 options?
+</i>&gt;<i>
+</i>&gt;<i> I want to set "Option Request" option to DHCPv6 messages except SOLICIT.
+</i>&gt;<i> If the dhclient use follow config file, the dhclient set "Option
+</i>&gt;<i> Request" to all message.
+</i>&gt;<i> Can the dhclient select target message?
+</i>&gt;<i>
+</i>&gt;<i> - config file (/etc/dhcp/dhclient.conf)
+</i>&gt;<i> request dhcp6.vendor-opts,
+</i>&gt;<i> dhcp6.sip-servers-addresses,
+</i>&gt;<i> dhcp6.name-servers,
+</i>&gt;<i> dhcp6.domain-search,
+</i>&gt;<i> dhcp6.sntp-servers;
+</i>&gt;<i> --
+</i>&gt;<i>
+</i>&gt;<i> Thanks and best regards.
+</i>&gt;<i>
+</i>&gt;<i> _______________________________________________
+</i>&gt;<i> dhcp-users mailing list
+</i>&gt;<i> <a href="https://lists.isc.org/mailman/listinfo/dhcp-users">dhcp-users at lists.isc.org</a>
+</i>&gt;<i> <a href="https://lists.isc.org/mailman/listinfo/dhcp-users">https://lists.isc.org/mailman/listinfo/dhcp-users</a>
+</i>
+
+-- 
+Katsuhisa Fujinaga     <a href="https://lists.isc.org/mailman/listinfo/dhcp-users">k.fujinaga at sdy.co.jp</a>
+SDY Corporation.       TEL:+81-47-401-7210 FAX:+81-47-401-7207
+</pre>
+
+
+<!--endarticle-->
+    <hr>
+    <p></p><ul>
+        <!--threads-->
+	<li>Previous message: <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/015659.html">Questions for a dhclient using DHCPv6
+</a></li>
+	<li>Next message: <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/015617.html">How to configure the dhclient.conf to let it eventually accept an	OFFER even if no OFFERs satisfy the requirements?
+</a></li>
+         <li> <b>Messages sorted by:</b> 
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/date.html#15658">[ date ]</a>
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/thread.html#15658">[ thread ]</a>
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/subject.html#15658">[ subject ]</a>
+              <a href="https://lists.isc.org/pipermail/dhcp-users/2012-June/author.html#15658">[ author ]</a>
+         </li>
+       </ul>
+
+<hr>
+<a href="https://lists.isc.org/mailman/listinfo/dhcp-users">More information about the dhcp-users
+mailing list</a><br>
+
+</body></html>

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org 
+
+START=39
+start() {
+	[ -d /proc/bus/usb ] && {
+		/bin/mount -t usbfs none /proc/bus/usb
+	}		
+}
+
+
+case "$1" in
+	"boot")		start	;;
+	"start")	start	;;
+#	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start USB function'
+				echo $0 'start - start USB function'
+#				echo $0 'stop  - stop USB function'
+				;;
+esac

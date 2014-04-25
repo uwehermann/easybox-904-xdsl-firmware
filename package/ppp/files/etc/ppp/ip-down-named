@@ -1,0 +1,9 @@
+#!/bin/sh
+
+
+### ctc added 20110516 ###
+
+resolv_update.sh $IFNAME
+
+##########################
+

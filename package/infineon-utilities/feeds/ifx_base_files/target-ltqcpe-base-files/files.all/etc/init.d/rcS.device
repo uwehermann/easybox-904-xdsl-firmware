@@ -1,0 +1,223 @@
+#!/bin/sh
+/bin/mount -a
+
+# create ramdisk for write
+
+# copy system setting from flash to ram
+mount -t ramfs -o nr_inodes=1k,mode=770 /dev/ram /ramdisk
+cp -ar /ramdisk_copy/* /ramdisk
+/bin/mount -t ramfs /dev/ram /dev
+mv /ramdisk/dev/* /dev
+
+/usr/sbin/mknod_util amazon_se-port /dev/amazon_se-port 
+
+/usr/sbin/swreset &
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+
+if [ "$CONFIG_FEATURE_IFX_ADSL_FIRMWARE_IN_ROOTFS" != "1" ]; then
+	if [ "`/bin/dd if=/dev/mtd/1 bs=4 count=1`" = "sqlz" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount /firmware
+	elif [ "`/bin/dd if=/dev/mtd/1 bs=4 count=1`" = "sqsh" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount /firmware
+	else
+		echo "ADSL Firmware Not Found"
+	fi
+fi
+
+/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+if [ $? -ne 0 ]; then
+	echo "FLASH config file missing/corrupted!"
+	/usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 0
+	/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	/bin/gunzip /ramdisk/flash/rc.conf.gz
+fi
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+
+# Read Configuration File
+if [ -r /etc/rc.conf ]; then
+         . /etc/rc.conf 2> /dev/null
+fi
+
+/usr/sbin/mknod_util dsl_cpe_api /dev/dsl_cpe_api
+/usr/sbin/mknod_util ifx_mei /dev/ifx_mei
+echo "0" > /tmp/adsl_status
+# load ADSL firmware
+if [ -r /firmware/modemhwe.bin ]; then
+   /etc/rc.d/rc.bringup_adsl_start
+else
+	echo "Not able to locate ADSL FW image in MTD partition, try to use the FW image from rootfs instead!!"
+	/usr/sbin/dsl_cpe_control -i -f /root/modemhwe.bin &
+fi
+
+### Move this to Services Start
+#/usr/sbin/check_dsl &
+
+# Create the passwd file
+touch /ramdisk/flash/passwd
+i=0
+while [ $i -lt $passFileLineCount ]
+do
+	eval passVar='$passFileLineCount'$i
+	echo $passVar >> /ramdisk/flash/passwd
+	i=$(( $i + 1 ))
+done
+
+insmod ifx_nfext_core
+insmod ifx_nfext_ppp
+
+#/etc/snmp/snmpd.conf
+if [ "$CONFIG_FEATURE_SNMPv1" = "1" ]; then
+	CONFIG_FEATURE_IFX_SNMP_AGENT="1"
+elif [ "$CONFIG_FEATURE_SNMPv3" = "1" ]; then
+	CONFIG_FEATURE_IFX_SNMP_AGENT="1"
+elif [ "$CONFIG_FEATURE_IFX_DSL_MANAGEMENT" = "1" ]; then
+	CONFIG_FEATURE_IFX_SNMP_AGENT="1"
+fi
+
+if [ "$CONFIG_FEATURE_IFX_SNMP_AGENT" = "1" ]; then
+	echo "######  V1 Configuration  ######" > /etc/snmp/snmpd.conf
+	echo "rocommunity	$SNMProcommunity" >> /etc/snmp/snmpd.conf
+	echo "rwcommunity	$SNMPrwcommunity" >> /etc/snmp/snmpd.conf
+	if [ "$SNMPTrapEnable" = "1" ]; then
+		echo "trapsink	$SNMPTrapIP  $SNMPTrapCommunity  $SNMPTrapPort" >> /etc/snmp/snmpd.conf
+		echo "trapcommunity $SNMPTrapCommunity " >> /etc/snmp/snmpd.conf
+		echo "authtrapenable	1" >> /etc/snmp/snmpd.conf
+	else
+		echo "#trapsink	$SNMPTrapIP  $SNMPTrapCommunity  $SNMPTrapPort" >> /etc/snmp/snmpd.conf
+	fi
+	echo "######  V3 Configuration  ######" >> /etc/snmp/snmpd.conf
+fi
+
+if [ "$CONFIG_FEATURE_VLAN" = "1" ]; then
+	/bin/mknod /dev/vlan c 69 0
+fi
+
+/bin/mknod /dev/adm6996 c 69 0
+
+/sbin/insmod admmod
+
+# Setup lo Interface Addresses
+/sbin/ifconfig lo 127.0.0.1 netmask 255.0.0.0
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# Setup Hostname
+echo "127.0.0.1	localhost.localdomain localhost" > /etc/hosts
+
+i=0
+while [ $i -lt $lan_main_Count ]
+do
+	eval ip='$lan_main_'$i'_ipAddr'
+	shorthost=${hostname%%.*}
+	echo "$ip ${hostname} $shorthost" >> /etc/hosts
+	i=$(( $i + 1 ))
+done
+
+### Move this to Services Start ###
+if [ -f /usr/sbin/dnrd ]; then
+	rm -rf /ramdisk/etc/dnrd
+	mkdir /ramdisk/etc/dnrd
+	/usr/sbin/dnrd
+fi
+
+if [ -f /bin/hostname ]; then
+	/bin/hostname localhost.localdomain
+fi
+
+### Move this service to Services Start ###
+# Start System log
+if [ -f /sbin/syslogd ]; then
+	echo "Bringing up syslog"
+#706141 : pramod start
+	if [ "$system_log_mode" = "1" -o "$system_log_mode" = "2" ]; then
+		if [ -n "$system_log_IP" -a "$system_log_IP" != "0.0.0.0" ]; then
+			if [ -n "$system_log_port" -a "$system_log_port" != "0" ]; then
+				if [ "$system_log_mode" = "2" ]; then
+					/sbin/syslogd -L -s 25 -b 2 -R $system_log_IP:$system_log_port -l $system_log_log_level
+				else
+					/sbin/syslogd -s 25 -b 2 -R $system_log_IP:$system_log_port -l $system_log_log_level
+				fi
+			else
+				if [ "$system_log_mode" = "2" ]; then
+					/sbin/syslogd -L -s 25 -b 2 0 -R $system_log_IP -l $system_log_log_level
+				else
+					/sbin/syslogd -s 25 -b 2 0 -R $system_log_IP -l $system_log_log_level
+				fi
+			fi
+		fi
+#706141 : pramod end 
+	else
+		/sbin/syslogd -s 25 -b 2 -l $system_log_log_level
+	fi
+fi
+
+# Start Kernel log
+if [ -f /sbin/klogd ]; then
+	echo "Bringing up klogd"
+	/sbin/klogd &
+fi
+
+i=0
+while [ $i -lt $lan_main_Count ]
+do
+	eval iface='$lan_main_'$i'_interface'
+	/usr/sbin/brctl addbr $iface
+	/usr/sbin/brctl setfd br0 1
+	/usr/sbin/brctl addif $iface eth0 
+	/usr/sbin/brctl stp $iface off
+	i=$(( $i + 1 ))
+done
+/sbin/ifconfig eth0 0.0.0.0 up
+
+# Run some demand likes http, telnetd
+/etc/rc.d/rc.bringup_services start
+
+/etc/rc.d/rc.bringup_lan start
+	
+# led device
+/bin/mknod /dev/led c 10 151
+
+/usr/sbin/version.sh -r&
+
+echo "nameserver 168.95.1.1" > /etc/resolv.conf
+
+#/usr/sbin/usb_util &
+
+#/sbin/insmod dwc_otg.o
+#/sbin/insmod g_ether.o
+#/sbin/insmod g_ether.o idVendor=0x07A6 idProduct=0x4610
+
+/usr/sbin/brctl addif $lan_main_0_interface usb0
+/sbin/ifconfig usb0 0.0.0.0 up
+
+#Start ipv6 enable
+if [ "$CONFIG_FEATURE_IPv6" = "1" -a "$ipv6_status" = "1" ]; then
+kernel_version=`uname -r`
+/sbin/insmod /lib/modules/${kernel_version}/kernel/net/ipv6/ipv6.o
+fi
+#ipv6 end
+
+#If tr69 is compiled in, open firewall hole
+#FIXME: move this to enable/disable TR69 from webpage
+
+#if [ "$CONFIG_PACKAGE_IFX_DEVM" = "1" ]; then
+#	/usr/sbin/iptables -t nat -I PREROUTING -p tcp --dport 8000 -j ACCEPT
+#	/usr/sbin/iptables -I INPUT -p tcp --dport 8000 -j ACCEPT
+#fi
+
+
+echo
+echo "+---------------------------------------------------+"
+echo "| Linux/MIPS on AMAZON_SE by Infineon COM AC BB_CPE |"
+echo "+---------------------------------------------------+"
+

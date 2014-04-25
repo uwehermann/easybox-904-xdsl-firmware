@@ -1,0 +1,19 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+if [ `/bin/grep -c -i voip /proc/cmdline` -ge 1 ] && ! [ -f /tmp/dect_demo_test ] ; then
+	echo "VoIP test mode" > /dev/console
+else
+#	/etc/init.d/bringup_ifx_net.sh
+	if [ -f /usr/sbin/dect_demo.sh ] ; then
+		echo -n #/usr/sbin/dect_demo.sh start all
+	fi
+fi
+
+if [ `/bin/grep -ci calibrate /proc/cmdline` -gt 0 ] ; then
+	hostname arcadyan
+fi
+
+# bitonic
+#(/usr/sbin/setup_netdev.sh ppadev ; /usr/sbin/setup_netdev.sh switch ; /usr/sbin/setup_netdev.sh port-enable; /etc/init.d/lcdwizard boot )&
+(/usr/sbin/setup_netdev.sh lan-phy-enable ; /etc/init.d/lcdwizard boot )&

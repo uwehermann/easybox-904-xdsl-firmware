@@ -1,0 +1,41 @@
+# Copyright (C) 2006 OpenWrt.org
+
+config interface loopback
+	option ifname	lo
+	option proto	static
+	option ipaddr	127.0.0.1
+	option netmask	255.0.0.0
+
+config interface lan
+	option ifname	eth0
+	option type 	bridge
+	option proto	static
+	option ipaddr	192.168.2.1
+	option netmask	255.255.255.0
+#	option ip6addr	"fc00::/64"
+	option ip6addr	"fc00::/64"
+
+config atm-bridge
+    option unit     0
+    option encaps   llc
+    # Ask your ISP for the correct vpi and vci values
+    #   Paradyne
+    # option vpi      0
+    # option vci      35
+    #   Zyxel AAM1212-53
+    # option vpi      1
+    # option vci      33
+    #   NCT
+	option vpi	"1"
+    option vci      33
+	# Most of the time this should be set to "bridged," but some ISPs require "routed"
+    option payload  bridged
+
+config interface wan200
+	option ifname	ppp200
+	option proto	"3g" 
+	option device	"/dev/ttyUSB0"
+	option apn	"Internet"
+	option service	"hsdpa" # or cdma, evdo,umts_only, gprs_only
+	#option pincode	"1111"
+	option mtu	"1492"

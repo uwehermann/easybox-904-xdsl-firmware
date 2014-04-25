@@ -1,0 +1,12 @@
+diff -ruPN org-files/include/linux/skbuff.h mod-files/include/linux/skbuff.h
+--- org-files/include/linux/skbuff.h	2010-08-06 16:16:07.000000000 +0530
++++ mod-files/include/linux/skbuff.h	2010-08-06 17:15:51.000000000 +0530
+@@ -407,6 +407,8 @@
+ 
+ 	__u16			vlan_tci;
+ 
++	char   isthissoftwire[3]; /* xav*/ 
++
+ 	sk_buff_data_t		transport_header;
+ 	sk_buff_data_t		network_header;
+ 	sk_buff_data_t		mac_header;

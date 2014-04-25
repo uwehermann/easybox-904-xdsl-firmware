@@ -1,0 +1,16 @@
+config IFX_DECT_SS_FEATURE_USIF_SPI
+		bool "DECT uses USIF SPI support"
+		select PACKAGE_kmod-dect_usif_spi
+		depends !PACKAGE_teridian-voice-daa-ter1x66
+		depends @TARGET_ltqcpe_platform_vr9
+		default n
+		help
+			Option to select USIF_SPI for DECT SS.
+						 NOTE-ifx_voip->FXO feature will be disabled; and please disable teridian driver.
+config LTQ_DT_FEATURES
+  bool "Dect DT Features"
+  #depends on CONFIG_TARGET_ifxcpe_platform_ar9
+  default n
+  help
+   Option to enable DECT DT Features.
+

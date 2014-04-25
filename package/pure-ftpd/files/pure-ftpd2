@@ -1,0 +1,23 @@
+#!/bin/sh
+# Copyright (C) 2007 OpenWrt.org
+
+# START=88
+
+
+case "$1" in
+	"boot")		/etc/init.d/pure-ftpd boot &	;;
+	"start")	/etc/init.d/pure-ftpd start &	;;
+	"stop")		/etc/init.d/pure-ftpd stop &	;;
+	"restart")	(/etc/init.d/pure-ftpd stop ; /etc/init.d/pure-ftpd start) & ;;
+	"reboot")	(/etc/init.d/pure-ftpd stop ; /etc/init.d/pure-ftpd boot) &  ;;
+	"gen_pwd")	(. /etc/init.d/pure-ftpd ; stop ; gen_pwd) &				;;
+	*)
+				echo $0 'boot     - setup and start FTP server'
+				echo $0 'start    - start FTP server'
+				echo $0 'stop     - stop FTP server'
+				echo $0 'restart  - restart FTP server'
+				echo $0 'reboot   - reboot FTP server'
+				echo $0 'gen_pwd  - generate password file'
+				;;
+esac
+

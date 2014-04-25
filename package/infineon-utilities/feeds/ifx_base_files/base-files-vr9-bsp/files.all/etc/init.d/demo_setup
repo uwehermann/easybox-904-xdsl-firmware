@@ -1,0 +1,8 @@
+#!/bin/sh /etc/rc.common
+
+START=98
+
+start() {
+cd /flash/BSP-Test-VR9/
+./bringup_xdsl_mode.sh
+}

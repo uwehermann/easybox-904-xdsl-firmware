@@ -1,0 +1,94 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org 
+
+START=zz
+
+start() {
+	echo "[postinit start]"
+
+	# bitonic update
+	if [ -f /tmp/booting ] ; then
+		rm /tmp/booting
+	fi
+
+	if [ -x /etc/init.d/postinit.ifx ] ; then
+		/etc/init.d/postinit.ifx
+	fi
+
+	# USB function, including USB FS mounting, Samba, FTP and LPD
+	/usr/sbin/usb.sh boot &
+
+	# WAN function
+	restart_wansvc.sh &
+
+	# refresh neighbors my MAC
+	LAN_IP=`umngcli get ip4addr@lan0`
+	BR_IF=br-lan
+	if [ -n "$LAN_IP" ] ; then
+		(arping -A -c 1 -I $BR_IF -s $LAN_IP $LAN_IP ; sleep 3 ; arping -A -c 1 -I $BR_IF -s $LAN_IP $LAN_IP ; sleep 3 ; arping -A -c 1 -I $BR_IF -s $LAN_IP $LAN_IP )&
+	fi
+
+	# periodically check PPP connection
+	if [ -x /usr/sbin/wan_ppp_admin.sh ] ; then
+		/etc/init.d/cron add wan_ppp_chk '* * * * * /usr/sbin/wan_ppp_admin.sh'
+	fi
+
+	# periodically check task priority
+	if [ -x /etc/init.d/task_prio.sh ] ; then
+		/etc/init.d/cron add task_prio_chk '* * * * * /etc/init.d/task_prio.sh check'
+	fi
+
+	LOG=`/usr/sbin/uboot_env.sh --get --name log2file`
+	if [ $LOG == "1" ] ; then
+		if [ -x /usr/sbin/console_log.sh ] ; then
+			/etc/init.d/cron add console_log_chk '*/1 * * * * /usr/sbin/console_log.sh'
+			/bin/ln -sf /tmp/consolelog /tmp/usb/log	
+		fi
+	fi
+
+	# update SIP bandwidth in case Giga-WAN
+	if [ -x /etc/init.d/brn_sip ] && [ "`umngcli get wan_type@system`" == 2 ] ; then
+		/etc/init.d/brn_sip bandwidth 10000 &
+	fi
+
+	# periodically check missed task
+	if [ -x /usr/sbin/arc-tsk-health-chk.sh ] ; then
+		/etc/init.d/cron add tsk_health_chk '* * * * * /usr/sbin/arc-tsk-health-chk.sh'
+	fi
+
+	# Set TCP Timeout to 5 minutes
+	echo 300 > /proc/sys/net/ipv4/netfilter/ip_conntrack_tcp_timeout_established
+
+	if [ `/usr/sbin/uboot_env.sh --get --name flashargs | grep -c -e bridge -e mptest -e calibrate -e emi` -ge 1 ] ; then
+		echo "######################################################" > /dev/console
+		echo "#                                                    #" > /dev/console
+		echo "#       WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!       #" > /dev/console
+		echo "#                                                    #" > /dev/console
+		echo "#              NOT NORMAL OPERATION MODE             #" > /dev/console
+		echo "#                                                    #" > /dev/console
+		echo "######################################################" > /dev/console
+	fi
+
+	# update boot counter
+	/usr/sbin/uboot_env.sh --set --name bootnum --value 0
+	if [ `grep -c "export CONFIG_UBOOT_CONFIG_DUAL_IMAGE=1" /etc/config.sh` -ge 1 ] ; then
+		BOOTID=`/usr/sbin/uboot_env.sh --get --name bootid --force 2>&-`
+		echo "######################################################" > /dev/console
+		echo "#                                                    #" > /dev/console
+		echo "#              BOOT FROM IMAGE ${BOOTID:-1}                     #" > /dev/console
+		echo "#                                                    #" > /dev/console
+		echo "######################################################" > /dev/console
+	fi
+}
+
+
+case "$1" in
+	"boot")		start	;;
+	"start")	start	;;
+#	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start post-initialization'
+				echo $0 'start - start post-initialization'
+#				echo $0 'stop  - stop post-initialization'
+				;;
+esac

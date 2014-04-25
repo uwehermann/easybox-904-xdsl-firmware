@@ -1,0 +1,166 @@
+#!/bin/sh /etc/rc.common
+#
+# ntpclient script
+
+#START=75
+### ctc ###
+#STOP=95
+###########
+
+. /etc/functions.sh
+
+NTPC=`which ntpclient`
+
+check_server() {
+	#echo check...
+
+	local hostname
+	local port
+	[ -n "$SERVER" ] && return
+
+	config_get hostname $1 hostname
+
+	config_get port $1 port
+
+	[ -z "$hostname" ] && return
+
+	sleep 3
+
+	#echo $hostname
+
+	$NTPC -c 1 -i 3 -p ${port:-123} -s -h $hostname > /dev/null
+	if [ "$?" == "0" ] ; then
+		SERVER=$hostname
+	fi
+}
+
+set_drift() {
+	config_get freq $1 freq
+	[ -n "$freq" ] && adjtimex -f $freq >/dev/null
+}
+
+start_ntpclient() {
+	unset SERVER
+
+	config_foreach set_drift ntpdrift
+	config_foreach check_server ntpserver
+
+	FAIL_NUM=`grep fail_num /tmp/ntp_status |cut -d '=' -f 2`
+
+	#echo $FAIL_NUM> /dev/console
+
+	if [ -z "$SERVER" ] ; then
+		let FAIL_NUM=$FAIL_NUM+1
+		sed -i "s/fail_num=.*/fail_num=${FAIL_NUM}/g" /tmp/ntp_status
+		return 1
+	fi
+
+	umng_syslog_cli add "18" "Info" "System" "NTP get time from server:${SERVER}"
+
+	sed -i "s/get_time_state=.*/get_time_state=1/g" /tmp/ntp_status
+	
+	sip_config SIP_CORE_update_ntp
+	
+	echo "SIP_CORE_update_ntp=1" >> /tmp/afu
+	
+	
+
+	return 0
+}
+
+stop_ntpclient() {
+	logger stopping ntpclient
+#	killall -q -KILL ntpclient
+
+	local PID
+	local PIDS
+
+	PIDS=`ps | grep "ntpclient" | awk '{ print $1 }'`
+	for PID in $PIDS ; do
+		if [ $PID -ne $$ ] && [ $PID -ne $PPID ] ; then
+			kill -9 ${PID} 2>&-
+		fi
+	done
+}
+
+load_settings() {
+	local interval
+	local count
+	local iface
+	
+	config_get interval $1 interval
+	config_get count $1 count
+	
+	[ -n "$count" ] && COUNT=$count
+	[ -n "$interval" ] && INTERVAL=$interval
+}
+
+load_settings() {
+	local interval
+	local count
+	local iface
+	
+	config_get interval $1 interval
+	config_get count $1 count
+	
+	[ -n "$count" ] && COUNT=$count
+	[ -n "$interval" ] && INTERVAL=$interval
+}
+
+config_load ntpclient
+config_foreach load_settings ntpclient
+
+start () {
+	local FIRST_TIME
+
+	if [ "$(umngcli get enable@ntp)" != "1" ] ; then
+		return 0
+	fi
+
+	echo "Ntpclient (re)starting..."
+#	echo UTC0BST,M3.5.0/1,M10.5.0/1 > /tmp/TZ
+
+	rm -rf /tmp/ntp_status
+
+	echo "get_time_state=0" >> /tmp/ntp_status
+	echo "fail_num=0" >> /tmp/ntp_status
+
+	FIRST_TIME=1
+	INTERVAL=60
+
+	while [ 1 ] ; do 	
+
+		#COUNT=0
+		#while [ $COUNT -le $INTERVAL ] ; do
+			#echo sleep...
+		sleep $INTERVAL	
+		
+			if [ "$(umngcli get enable@ntp)" != "1" ] ; then
+				return 0
+			fi
+			#let COUNT=$COUNT+1
+		#done
+
+		#echo wake...
+		start_ntpclient
+
+		if [ "$?" == "0" ] ; then
+			INTERVAL=`ccfg_cli get interval@ntp`
+			if [ $FIRST_TIME == "1" ] ; then
+				/etc/init.d/tr69 ntp-sync
+				FIRST_TIME=0
+			fi
+		fi
+
+	done
+	
+	return 0
+}
+
+stop () {
+	echo "Stopping ntpclient."
+	stop_ntpclient
+
+	return 0
+}
+

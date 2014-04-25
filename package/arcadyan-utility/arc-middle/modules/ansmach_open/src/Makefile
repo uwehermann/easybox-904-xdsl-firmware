@@ -1,0 +1,21 @@
+LIB_VERMAJOR = 0
+LIB_VERMINOR = 1
+LIB_MAPI_FILENAME = libmapi_ansmach.so
+
+LIB_CFLAGS  = $(CFLAGS) -shared -fPIC -I$(STAGING_DIR)/usr/include
+LIB_MAPI_LDFLAGS = $(LDFLAGS) -Wl,-soname,$(LIB_MAPI_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR)
+
+LIB_MAPI_OBJ = mid_mapi_ansmach.o mid_mapi_ansmach_db.o
+
+all: libmapi_ansmach
+
+libmapi_ansmach:
+	$(CC) $(LIB_CFLAGS) -c -o mid_mapi_ansmach.o mid_mapi_ansmach.c
+	$(CC) $(LIB_CFLAGS) -c -o mid_mapi_ansmach_db.o mid_mapi_ansmach_db.c
+	$(CC) $(LIB_CFLAGS) $(LIB_MAPI_LDFLAGS) \
+		-o $(LIB_MAPI_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(LIB_MAPI_OBJ)
+	ln -sf $(LIB_MAPI_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(LIB_MAPI_FILENAME)
+	ln -sf $(LIB_MAPI_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(LIB_MAPI_FILENAME).$(LIB_VERMAJOR)
+
+clean:
+	rm -f $(LIB_MAPI_FILENAME) *.o

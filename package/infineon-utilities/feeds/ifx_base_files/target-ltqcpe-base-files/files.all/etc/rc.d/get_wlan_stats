@@ -1,0 +1,42 @@
+#!/bin/sh
+OUTPUT="/tmp/cmd_output"
+flush_output()
+{
+	echo "" > "$OUTPUT"
+}
+SED="/bin/sed"
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+flush_output
+if [ "$CONFIG_FEATURE_IFX_WIRELESS_TSC" = "1" ]; then
+	# [ check for status before calling twc
+	wlan_cur_status=`/usr/sbin/status_oper GET wlan_config status`
+	if [ "$wlan_cur_status" = "complete" -o -z "$wlan_cur_status" ]; then
+		if [ "$1" = "stats" ]; then
+			shift
+			CMD_GROUP="mib" 
+			twc -s ${CMD_GROUP} -i${1} -e0x${2} --uint32 ? > "/tmp/tsc_wlan_stats"
+		elif [ "$1" = "dev_assoc" ]; then
+			shift
+			twc -s vap -i${1} --stationList | grep "B_I>" > "$OUTPUT"
+			"$SED" -n 's,B_I>,,p' "$OUTPUT" > "/tmp/tsc_wlan_assodevices"
+		elif [ "$1" = "bssid" ]; then
+			shift
+			twc -s vap -i${1} --bssid ? > "/tmp/tsc_wlan_bssid"
+		fi
+	fi # check for status ]
+fi
+

@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Copyright (C) 2006 OpenWrt.org
+
+# echo hotplug usb - action ${ACTION} prod ${PRODUCT} type ${TYPE} intf ${INTERFACE} dev ${DEVICE} devFs ${DEVFS} > /dev/console
+# echo hotplug usb @${ACTION} @${SUBSYSTEM} @${PHYSDEVPATH} @${DEVPATH} @${MODALIAS} @${MAJOR} @${MINOR} @${DEVICENAME} > /dev/console
+
+
+case "$ACTION" in
+	add)
+#		[ -n "${INTERFACE}" ] &&
+#		[ "$(expr substr ${INTERFACE} 1 2)" == "8/" ]  && {
+#			/sbin/usb-storage &
+#		}
+		;;
+esac	

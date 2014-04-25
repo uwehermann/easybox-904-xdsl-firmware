@@ -1,0 +1,73 @@
+. /lib/firewall/uci_firewall.sh
+unset ZONE
+config_get ifname $INTERFACE ifname
+[ "$ifname" == "lo" ] && exit 0
+
+load_zones() {
+	local name
+	local network
+	config_get name $1 name
+	config_get network $1 network
+	[ -z "$network" ] && network=$name
+	for n in $network; do
+		[ "$n" = "$INTERFACE" ] && ZONE="$ZONE $name"
+	done
+}
+
+config_foreach load_zones zone
+
+[ -z "$ZONE" ] && exit 0
+
+[ ifup = "$ACTION" -a "$ifname" != "" ] && {
+echo "INTERFACE=$INTERFACE ifname=$ifname ZONE=$ZONE ACTION=$ACTION" >> /tmp/fw_test.txt
+
+	## patch for the case that after WAN PPPoE terminates due to keepalive failure,
+	## the next ifup will get wrong ifname (e.g., "eth1" instead of "ppp0")
+	#if [ "${INTERFACE:0:3}" == "wan" ]; then
+	#	grep -v '^[[:blank:]]*#' /etc/config/network | grep -q pppoe
+	#	if [ $? -eq 0 ]; then
+	#		ifname=`ifconfig | awk -F' ' '/ppp/ { print $1 }'`
+	#	fi
+	#fi
+
+	for z in $ZONE; do
+		local loaded
+		config_get loaded core loaded
+echo "[PID:$$]loaded=$loaded" >> /tmp/fw_test.txt
+		[ -n "$loaded" ] && addif "$INTERFACE" "$ifname" "$z"
+## for some unknown reason, "loaded" may be reset after ifdown, and addif is thus not executed
+## so here we try to workround it by delif and then addif
+        #delif "$INTERFACE" "$ifname" "$z"  #ctc, I known why the following line are wrong - uci_firewall.sh::addif()::line57 config_get n_zone core "${network}_zone"
+        #addif "$INTERFACE" "$ifname" "$z"
+	done
+}
+
+[ ifdown = "$ACTION" ] && {
+echo "INTERFACE=$INTERFACE ifname=$ifname ZONE=$ZONE ACTION=$ACTION" >> /tmp/fw_test.txt
+	## patch for the case that after WAN PPPoE terminates due to keepalive failure,
+	## the next ifup will get wrong ifname (e.g., "eth1" instead of "ppp0")
+	#if [ "${INTERFACE:0:3}" == "wan" ]; then
+	#	grep -v '^[[:blank:]]*#' /etc/config/network | grep -q pppoe
+	#	if [ $? -eq 0 ]; then
+	#	    exit 0
+	#		#ifname=`ifconfig | awk -F' ' '/ppp/ { print $1 }'`
+	#	fi
+	#fi
+
+	#debug monitor for interface down and loaded flag will be set to 0
+	local loaded
+	config_get loaded core loaded
+	#if [ "$loaded" != "1" ]; then
+		echo "[PID:$$]loaded=$loaded"
+	#fi
+
+	for z in $ZONE; do
+		local up
+		config_get up $z up
+echo "up=$up" >> /tmp/fw_test.txt
+	## ygchen, to workaround the problem sometimes after interface is up, it's zones (e.g. zone_wan300_ACCEPT, ...)
+	## may miss some rules, so here I try to reduce the delif and addif frequency
+	##	[ "$up" == "1" ] && delif "$INTERFACE" "$ifname" "$z"
+	##
+	done
+}

@@ -1,0 +1,97 @@
+#!/bin/sh /etc/rc.common
+#START=50
+
+MAX_IF=3
+
+stop() {
+	local	CNT
+
+	CNT=0
+	while [ $CNT -lt $MAX_IF ] ; do
+		br2684ctl -k $CNT
+		let CNT=$CNT+1
+	done
+}
+
+start_daemon() {
+	local cfg="$1"
+	config_get atmdev  "$cfg" atmdev
+	config_get unit    "$cfg" unit
+	config_get vpi     "$cfg" vpi
+	config_get vci     "$cfg" vci
+	config_get encaps  "$cfg" encaps
+	config_get payload "$cfg" payload
+
+	wanIf=`printf "wan%03d" ${unit}`
+
+	if [ "`umngcli get adminstate@$wanIf`" != "enable" ] ; then
+		return
+	fi
+
+	case "$encaps" in
+		1|vc)		encaps=1 ;;
+		*)			encaps=0 ;;
+	esac
+	case "$payload" in
+		0|routed)	payload=0 ;;
+		*)			payload=1 ;;
+	esac
+
+	atmIf=`printf "pvc%03d" ${unit}`
+	qos=`umngcli get qos@$atmIf`
+	if [ -n "$qos" ] ; then
+		qos="-q $qos"
+	fi
+
+	br2684ctl -k "$unit"
+	br2684ctl -b -c "$unit" -e "$encaps" -p "$payload" $qos -a "${atmdev:+$atmdev.}${vpi:-8}.${vci:-35}"
+
+	usleep 1000
+
+	ifconfig nas$unit down
+	ifconfig nas$unit hw ether $2
+	ifconfig nas$unit up
+
+	if [ -f /tmp/ulogd.stat ] && [ `grep -c "${wanIf}=wan" /tmp/ulogd.stat` -gt 0 ] ; then # for packet capturing
+		echo -n
+	else
+		ppacmd addwan -i nas$unit
+#		echo add wan nas$unit > /proc/ppa/api/netif
+		echo update nas$unit > /proc/ppa/api/netif
+	fi
+}
+
+start() {
+	local wanIf
+	local atmIf
+	local MacAddr
+	local proto
+
+	stop
+
+	if [ "`ccfg_cli get wan_type@system`" != "1" ] ; then
+		if [ "`ccfg_cli get wan_type@system`" != "0" ] || [ "`ccfg_cli get active_wan_type@system`" != "1" ] ; then
+			return
+		fi
+	fi
+
+	ethaddr=`getmacaddr.sh wan 0`
+
+	if [ -e /lib/modules/`uname -r`/br2684.ko ] ; then
+		insmod br2684 >/dev/null 2>/dev/null
+	fi
+
+	config_load network
+
+	CNT=0
+	while [ "$CNT" -lt "$MAX_IF" ] ; do
+		wanIf=`printf "wan%03d" $CNT`
+		proto=`umngcli get proto@$wanIf`
+		if [ "$proto" == "static" ] || [ "$proto" == "dhcp" ] || [ "$proto" == "pppoe" ] || [ "$proto" == "none" ] ; then
+			atmIf=${wanIf/wan/atm-bridge}
+			config_foreach start_daemon $atmIf "$ethaddr"
+		fi
+		ethaddr=`echo $ethaddr | next_macaddr 0`
+		CNT=`expr $CNT + 1`
+	done
+}

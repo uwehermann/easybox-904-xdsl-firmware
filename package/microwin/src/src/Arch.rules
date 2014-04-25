@@ -1,0 +1,246 @@
+##############################################################################
+# Microwindows Architecture rules Makefile
+# Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
+# Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
+#
+# Architecture-specific settings.
+#
+# NOTE: The MW_DIR_SRC environment variable should be set to that top directory
+##############################################################################
+
+# Standard set of warnings for all platforms that use GCC
+GCC_WARNINGS := -Wall -Wstrict-prototypes -Wpointer-arith -Wbad-function-cast -Wmissing-prototypes # -Werror
+#GCC_WARNINGS := -Wall -Wpointer-arith
+
+# Platform dependent flags & definitions
+
+ifeq ($(ARCH), LINUX-NATIVE)
+ifeq ($(USE_CCACHE), 1)
+COMPILER = ccache gcc
+else
+COMPILER = gcc
+endif
+CXX_COMPILER = g++
+TOOLSPREFIX = $(NATIVETOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS)
+LDFLAGS +=
+# include the following line for static libraries
+#LDFLAGS += -static
+endif
+
+ifeq ($(ARCH), LINUX-AVR32)
+ifeq ($(USE_CCACHE), 1)
+COMPILER = ccache gcc
+else
+COMPILER = gcc
+endif
+CXX_COMPILER = g++
+TOOLSPREFIX = $(AVR32TOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS) -D_GNU_SOURCE
+LDFLAGS +=
+# include the following line for static libraries
+#LDFLAGS += -static
+endif
+
+ifeq ($(ARCH), LINUX-TCC)
+COMPILER = tcc
+CXX_COMPILER = tcc
+TOOLSPREFIX =
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += -Dlinux=1
+#CFLAGS += -Wall $(OPTFLAGS)
+LDFLAGS +=
+# include the following line for static libraries
+#LDFLAGS += -static
+endif
+
+ifeq ($(ARCH), LINUX-ARM)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX = $(ARMTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DARCH_NEED_ALIGN32
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS) -mstructure-size-boundary=8
+LDFLAGS +=
+endif
+
+ifeq ($(ARCH), UCLINUX-ARM)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX = $(ARMTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DARM_LINUX -D__uClinux__
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS) -mstructure-size-boundary=8
+LDFLAGS += -elf2flt
+FLTFLAGS += -s 64000
+endif
+
+ifeq ($(ARCH), LINUX-MIPS)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX = $(MIPSTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DARCH_NEED_ALIGN32
+CFLAGS += -msoft-float $(GCC_WARNINGS) $(OPTFLAGS)
+ifneq ($(DEBUG), Y)
+CFLAGS += -s
+endif
+LDFLAGS +=
+endif
+
+ifeq ($(ARCH), LINUX-POWERPC)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX = $(POWERPCTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += -msoft-float $(GCC_WARNINGS) $(OPTFLAGS)
+ifneq ($(DEBUG), Y)
+CFLAGS += -s
+endif
+LDFLAGS +=
+# Added define to avoid compiler error for PPC
+DEFINES += -DARCH_LINUX_POWERPPC=1
+endif
+
+ifeq ($(ARCH), LINUX-SH)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX =$(SHTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += -m1 -m3 $(GCC_WARNINGS) $(OPTFLAGS)
+LDFLAGS +=
+endif
+
+ifeq ($(ARCH), LINUX-SPARC)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX =
+DEFINES += -DLINUX=1 -DUNIX=1 -DMW_CPU_BIG_ENDIAN=1
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS)
+LDFLAGS +=
+# include the following line for static libraries
+#LDFLAGS += -static
+# Added define to avoid compiler error for SPARC
+DEFINES += -DARCH_LINUX_SPARC=1
+endif
+
+ifeq ($(ARCH), SOLARIS)
+# may require using cc if gcc not installed:
+COMPILER = gcc
+HOSTCC = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX =
+DEFINES += -DUNIX=1 -DMW_CPU_BIG_ENDIAN=1
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS)
+LDFLAGS += -lsocket -lnsl -lrt
+endif
+
+ifeq ($(ARCH), TRIMEDIA)
+LUD_ROOT = ../../../../../../..
+COMPILER = cc
+CXX_COMPILER = CC
+TOOLSPREFIX = tm
+DEFINES += -DTRIMEDIA=1 -DTCS2 -DOSAL -DLUD_USE_MEMSPACE
+DEFINES += -DMW_NOSIGNALS=1 -DMW_FEATURE_GDERROR=1
+INCLUDEDIRS += -I$(LUD_ROOT)/src/include -I$(LUD_ROOT)/src/modules/fb/include
+HOSTCFLAGS += -I$(LUD_ROOT)/src/include -I$(LUD_ROOT)/src/modules/fb/include
+CFLAGS += -O2 -el -target tm1 -host nohost -tmconfig=$(LUD_ROOT)/src/misc/tmconfig2.1 -B -Xdiag=1
+LDFLAGS += -O2 -el -target tm1 -host nohost -tmconfig=$(LUD_ROOT)/src/misc/tmconfig2.1 -B -Xdiag=1
+# include the following line for static libraries
+#LDFLAGS += -static
+endif
+
+ifeq ($(ARCH), FREEBSD-X86)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX =
+# __FreeBSD__ is automatically defined
+DEFINES += -DUNIX=1
+CFLAGS += -Wall $(OPTFLAGS)
+LDFLAGS +=
+endif
+
+ifeq ($(ARCH), ELKS)
+COMPILER = bcc
+HOSTCC = gcc
+CXX_COMPILER =
+TOOLSPREFIX =
+INCLUDEDIRS += -I/usr/bcc/include -I/home/greg/net/elks/include
+DEFINES += -DELKS=1 -DUNIX=1 -Dconst= -Dvolatile=
+CFLAGS += -0 -ansi -O
+LDFLAGS +=
+endif
+
+ifeq ($(ARCH), DJGPP)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX =
+DEFINES += -DDOS_DJGPP=1 -D_NAIVE_DOS_REGS=1 -DMSDOS=1
+CFLAGS += -Wall $(OPTFLAGS)
+LDFLAGS +=
+endif
+
+# For RTEMS all variables are passed from Makefile.rtems after being
+# extracted from the BSP specific installation.
+ifeq ($(ARCH), RTEMS)
+    COMPILER = $(RTEMS_CC)
+    CXX_COMPILER = $(RTEMS_CC)
+    INCLUDEDIRS += -I$(RTEMS_MAKEFILE_PATH)/lib/include
+    DEFINES += -DUNIX=1 -DRTEMS=1
+    CFLAGS += -O4 $(GCC_WARNINGS) -fasm -g \
+     -B$(RTEMS_MAKEFILE_PATH)/lib/ -specs bsp_specs -qrtems
+
+endif
+
+ifeq ($(ARCH), ECOS)
+    COMPILER = gcc
+    CXX_COMPILER = g++
+    TOOLSPREFIX = $(ARMTOOLSPREFIX)
+    ECOS_PREFIX = /work/iPAQ/ecos/install
+    INCLUDEDIRS += -I$(ECOS_PREFIX)/include
+    DEFINES += -D__ECOS=1 -DUNIX=1
+    CFLAGS += -mcpu=strongarm -Wall -ffunction-sections -fdata-sections -O2 -g
+    LDFLAGS += -nostdlib
+endif
+
+ifeq ($(ARCH), CYGWIN)
+ifeq ($(USE_CCACHE), 1)
+COMPILER = ccache gcc
+else
+COMPILER = gcc
+endif
+CXX_COMPILER = g++
+TOOLSPREFIX =
+#Note: to detect from C code, do "#ifdef __CYGWIN__"
+# __CYGWIN__ is automatically defined
+DEFINES += -DUNIX=1
+CFLAGS += -Wall $(OPTFLAGS)
+LDFLAGS +=
+# include the following line for static libraries
+#LDFLAGS += -static
+endif
+
+ifeq ($(ARCH), LINUX-BLACKFIN)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX = $(BLACKFINTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -Dlinux -DBLACKFIN
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS)
+LDFLAGS += -Wl,-elf2flt
+endif
+
+ifeq ($(ARCH), PSP)
+PSPSDK = $(shell psp-config --pspsdk-path)
+COMPILER = gcc
+CXX_COMPILER = g++
+TOOLSPREFIX = $(PSPTOOLSPREFIX)
+DEFINES += -DPSP=1 -DMW_NOSIGNALS=1 -DMW_FEATURE_GDERROR=1 -DHAVE_TIMER_SUPPORT
+CFLAGS += $(GCC_WARNINGS) $(OPTFLAGS) -I$(PSPSDK)/include -G0 -O2 -DARCH_NEED_ALIGN32
+ifneq ($(DEBUG), Y)
+CFLAGS += -s
+endif
+LDFLAGS += -L$(PSPSDK)/lib
+endif
+
+ifeq ($(BIGENDIAN), Y)
+DEFINES += -DMW_CPU_BIG_ENDIAN=1
+endif

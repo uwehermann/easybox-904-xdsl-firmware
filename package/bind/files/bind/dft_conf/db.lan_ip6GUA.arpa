@@ -1,0 +1,24 @@
+; *************************************************************** ;
+; 
+; Version : 1.0.2
+; Date    : 2009/04/02
+; Author  : kevin cheng
+; E-mail  : kevin_cheng@arcadyan.com.tw
+;
+; *************************************************************** ;
+
+;
+; BIND reverse zone datafile for LAN ipv6 ULA
+;
+
+$TTL	3h
+@	IN	SOA	dns.speedport.ip.	hostmaster.speedport.ip. (
+	1	; Serial
+	3h	; Refresh
+	1h	; Retry
+	1w	; Expire
+	1h )	; Negative Cache TTL
+;
+
+				IN	NS	dns.speedport.ip.
+;

@@ -1,0 +1,170 @@
+#!/bin/sh
+/bin/mount -a
+
+# create ramdisk for write
+
+# copy system setting from flash to ram
+mount -t ramfs -o nr_inodes=1k,mode=770 /dev/ram /ramdisk
+cp -ar /ramdisk_copy/* /ramdisk
+/bin/mount -t ramfs /dev/ram /dev
+mv /ramdisk/dev/* /dev
+
+#/usr/sbin/mknod_util amazon_se-port /dev/amazon_se-port 
+
+#/usr/sbin/swreset &
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+
+/sbin/syslogd &
+
+if [ "$IFX_ADSL_FIRMWARE_IN_ROOTFS" != "1" ]; then
+	if [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "sqlz" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount /firmware
+	#elif [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "sqsh" ] ; then
+	elif [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "qshs" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount /firmware
+	else
+		 echo " ADSL Firmware Not Found"
+	fi
+fi
+
+/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+	/usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 0
+	/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+
+# Read Configuration File
+if [ -r /etc/rc.conf ]; then
+         . /etc/rc.conf 2> /dev/null
+fi
+
+
+#mknod /dev/adm6996 c 69 0
+/usr/sbin/mknod_util drv_dsl_cpe_os_linux /dev/dsl_cpe_api
+/usr/sbin/mknod_util ifx_mei /dev/ifx_mei
+mknod /dev/ifx_ppa c 181 0
+
+#dsl_cpe_control -i -f /firmware/modemhwe.bin &
+#dsl_cpe_control -o -f /firmware/modemhwe.bin -a /ramdisk/flash/cmv_batch -n"/etc/rc.d/init.d/xdslrc.sh" -i05_00_04_00_0C_01_00_00&
+#dsl_cpe_control -o -f /firmware/modemhwe.bin -i05_00_04_00_0C_01_00_00&
+
+#Default Annex B 
+#/usr/sbin/dsl_cpe_control -o -f /firmware/modemhwe.bin -a /ramdisk/flash/cmv_batch -n"/etc/rc.d/init.d/xdslrc.sh" -i10_00_10_00_00_04_00_00&
+
+#/usr/sbin/mknod_util dsl_cpe_api /dev/dsl_cpe_api
+#/usr/sbin/mknod_util ifx_mei /dev/ifx_mei
+# load ADSL firmware
+#if [ -r /firmware/modemhwe.bin ]; then
+#	/etc/rc.d/rc.bringup_adsl_start
+#else
+#	echo "Not able to locate ADSL FW image in MTD partition, try to use the FW image from rootfs instead!!"
+#	/usr/sbin/dsl_cpe_control -i -f /root/modemhwe.bin &
+#fi
+# Start DSL CPE Control Application to bringup the ADSL Link
+#modprobe amazon_se_ptm
+#modprobe amazon_se_ppe
+#/usr/sbin/restore_dsl_settings.sh
+
+if [ "$IFX_CONFIG_ADSL_FIRMWARE_ANNEXB" = "1" ]; then
+  #/usr/sbin/dsl_cpe_control -i10_00_10_00_00_04_00_00 -o -f /firmware/modemhwe.bin -a /ramdisk/etc/dsl_api/cmv_scripts -n"/etc/rc.d/init.d/xdslrc.sh" & 
+  /usr/sbin/dsl_cpe_control -i10_00_10_00_00_04_00_00 -f /firmware/modemhwe.bin -a /ramdisk/etc/dsl_api/cmv_scripts -n"/etc/rc.d/init.d/xdslrc.sh" & 
+else
+  /usr/sbin/dsl_cpe_control -i05_00_04_00_0C_01_00_00 -o -f /firmware/modemhwe.bin -n"/etc/rc.d/init.d/xdslrc.sh" & 
+fi
+
+#805271:<IFTW-fchang>.added dsl_cpe_control should not be loaded at all  at the very begining to make PTM working
+#if [ "$IFX_ASE_CONFIG_PTM" != "1" ]; then
+#/usr/sbin/dsl_cpe_control -i & 
+#fi
+
+# Create the passwd file
+touch /ramdisk/flash/passwd
+i=0
+while [ $i -lt $passFileLineCount ]
+do
+	eval passVar='$passFileLineCount'$i
+	echo $passVar >> /ramdisk/flash/passwd
+	i=`expr $i + 1`
+done
+
+
+
+# Setup lo Interface Addresses
+/sbin/ifconfig lo 127.0.0.1 netmask 255.0.0.0
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# Setup Hostname
+echo "127.0.0.1	localhost.localdomain localhost" > /etc/hosts
+echo "`echo $ifconfig_lan |cut -f1 -d ' '` ${hostname} `echo ${hostname} |cut -f1 -d.`" >> /etc/hosts
+
+if [ -f /bin/hostname ]; then
+	#/bin/hostname localhost.localdomain
+	/bin/hostname ${hostname}
+fi
+
+#/usr/sbin/brctl addbr $lan_main_0_interface
+/usr/sbin/brctl addbr br0
+/usr/sbin/brctl setfd br0 1
+#/usr/sbin/brctl addif $lan_main_0_interface eth0
+/usr/sbin/brctl addif br0 eth0
+#/usr/sbin/brctl stp $lan_main_0_interface off
+/usr/sbin/brctl stp br0 off
+/sbin/ifconfig eth0 0.0.0.0 up
+/sbin/ifconfig br0 192.168.1.1 up
+
+#/usr/sbin/version.sh -r&
+
+#echo "nameserver 168.95.1.1" > /etc/resolv.conf
+
+#/usr/sbin/usb_util &
+
+/sbin/insmod /lib/modules/2.6.20-Amazon_SE/kernel/drivers/usb/gadget/dwc_otg_gadget.ko
+#board_mac=`/usr/sbin/upgrade mac_get 0`
+#/sbin/insmod g_ether.ko dev_addr="$board_mac"
+/sbin/insmod /lib/modules/2.6.20-Amazon_SE/kernel/drivers/usb/gadget/g_ether.ko
+sleep 1
+ifconfig usb0 up 
+sleep 1 
+brctl addif br0 usb0
+#/sbin/insmod g_ether.o idVendor=0x07A6 idProduct=0x4610
+
+#/usr/sbin/brctl addif $lan_main_0_interface usb0
+#/usr/sbin/brctl addif br0 usb0
+#/sbin/ifconfig usb0 0.0.0.0 up
+
+#804101:fchang.added.start Add ADSL CRC workaround by changing the DMA polling frequency
+#mknod /dev/mem c 1 1
+#mem -us 0x1e104114 -w 0x80000010
+#804101:fchang.added.end
+
+
+/usr/sbin/br2684ctld
+/usr/bin/oamd &
+
+# TFTP daemon
+/usr/sbin/tftpd -l -c -u root -s /ramdisk/tftp_upload > /dev/null 2>&1 &
+
+# Telnet daemon
+/usr/sbin/telnetd &
+
+#br2684ctl -b -c 1 -p 1 -e 0 -q UBR -a 0.33
+#ifconfig nas1 0.0.0.0 up
+#brctl addif br0 nas1
+
+echo
+echo "+---------------------------------------------------+"
+echo "| Linux/MIPS on AMAZON_SE by Infineon COM AC BB_CPE |"
+echo "+---------------------------------------------------+"
+
+#/bin/sh

@@ -1,0 +1,373 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+
+	case "$1" in
+		load)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_init		
+			elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+            . /etc/rc.d/ath_wlan_init
+			fi
+			;;
+		 load_sec)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" = "1" ]; then
+				if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+					. /etc/rc.d/wave_wlan_sec_init
+				elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+          				. /etc/rc.d/ath_wlan_init 1
+				fi
+			fi
+			;;
+		capability)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_capability 0
+			elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+            . /etc/rc.d/ath_wlan_capability
+			fi
+			;;
+		capability_sec)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" = "1" ]; then
+                        	if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+					. /etc/rc.d/wave_wlan_capability 1
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+			                . /etc/rc.d/ath_wlan_capability 1
+
+                        	fi
+			fi
+			;;
+		start)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				# todo: later wave_wlan_start will only get called for related ap index,
+				# but for the moment all AP/VAP must be started (on stop for any AP/VAP
+				# the driver is rmmod)
+			
+				if [ -n "$CONFIG_TARGET_LTQCPE_PLATFORM_AR9_VB" ]; then
+					wave300_ap_count=1
+				else
+					eval wave300_ap_count='$'wlan_main_Count
+					echo "wave300_ap_count=$wave300_ap_count"
+				fi
+				for i in 0 1 2 3 4 5 6 7 8 9
+				do
+					if [ $wave300_ap_count -eq $i ]; then
+						break
+					fi
+					echo "start: i = $i, ap_num = $wave300_ap_count"
+					(. /etc/rc.d/wave_wlan_start $i)
+				done
+
+			elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then				
+ 				if [ $# -eq 1 ]; then
+                                     /etc/rc.d/ath_wlan_ap_start $@
+                        	else
+                                     i=0
+                                     while [ $i -lt $wlan_main_Count ]
+                                     do
+                                        /etc/rc.d/ath_wlan_ap_start $i
+	                                i=`expr $i + 1`
+                                     done
+                        	fi
+			fi
+			;;
+		stop)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				if [ $# -eq 1 ]; then
+					. /etc/rc.d/wave_wlan_stop $@
+				else
+				. /etc/rc.d/wave_wlan_stop
+				fi
+			elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        	if [ $# -eq 1 ]; then
+                                      . /etc/rc.d/ath_wlan_ap_stop $@
+                        	else
+                                      . /etc/rc.d/ath_wlan_ap_stop
+                        	fi
+			fi
+			;;
+		add)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+			   if [ $# -eq 1 ]; then
+					. /etc/rc.d/wave_wlan_start $@
+			   else
+					echo "Usage: /etc/rc.d/wave_wlan_start vap_index"
+			   fi
+         		fi
+			;;
+		remove)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+			   if [ $# -eq 1 ]; then
+					. /etc/rc.d/wave_wlan_remove_vap $@
+			   else
+					echo "Usage: /etc/rc.d/wave_wlan_remove_vap vap_index"
+			   fi
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                           if [ $# -eq 1 ]; then
+                               . /etc/rc.d/ath_wlan_remove_vap $@
+                           else
+                                echo "Usage: /etc/rc.d/ath_wlan_remove_vap vap_index"
+                           fi
+
+         		fi
+			;;
+		sec_mod)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_sec_modify
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                           if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_sec_modify $@
+                           else
+                                echo "Usage: /etc/rc.d/ath_wlan_sec_modify vap_index"
+                           fi
+
+         		fi
+			;;
+		wmm_mod)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wmm_modify $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+	                        if [ $# -eq 1 ]; then
+        	                        . /etc/rc.d/ath_wlan_wmm_modify $@
+                	        else
+                        	        echo "Usage: /etc/rc.d/ath_wlan_wmm_modify vap_index"
+                        	fi
+         		fi
+			;;
+		wps_conf)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wps_config $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                           if [ $# -eq 1 ]; then
+                                /etc/rc.d/ath_wlan_wps_config $@
+                           else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_config vap_index"
+                           fi
+        		fi
+			;;
+		wps_trigger_pbc)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wps_trigger_pbc_pairing  $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                               . /etc/rc.d/ath_wlan_wps_trigger_pbc_pairing $@
+                        else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_trigger_pbc_pairing vap_index"
+                        fi
+         		fi
+			;;
+		wps_trigger_pin)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wps_trigger_pin_pairing  $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 2 ]; then
+                               . /etc/rc.d/ath_wlan_wps_trigger_pin_pairing $@
+                        else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_trigger_pin_pairing vap_index pin"
+                        fi
+		        fi
+			;;
+		get_wps_pin)
+			shift
+                        if [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_wps_get_pin $@
+                        else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_get_pin vap_index"
+                        fi
+         		else
+			   if [ $# -eq 1 ]; then
+               			. /etc/rc.d/wlan_wps_get_pin $@
+			   else
+               			echo "Usage: /etc/rc.d/wlan_wps_get_pin vap_index"
+			   fi
+         		fi
+			;;
+		get_wps_profile)
+			shift
+                        if [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_wps_get_profile $@
+                        else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_get_profile vap_index"
+                        fi
+         		fi
+			;;
+		restore_wps_pin)
+			shift
+                        if [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                               . /etc/rc.d/ath_wlan_wps_reset_pin $@
+                        else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_reset_pin vap_index"
+                        fi
+         		fi
+			;;
+		reset_wps)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wps_reset $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                         if [ $# -eq 1 -o $# -eq 3 ]; then
+                                . /etc/rc.d/ath_wlan_wps_reset $@
+                        else
+                                echo "Usage: /etc/rc.d/ath_wlan_wps_reset vap_index"
+                        fi
+         		fi
+			;;
+		generate_wps_pin)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wps_generate_pin $@
+			fi
+			;;
+		mac_ctrl_mod)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_mac_ctrl_modify $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                         if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_mac_ctrl_modify $@
+                        else
+                                        . /etc/rc.d/ath_wlan_mac_ctrl_modify
+                        fi
+
+         		fi
+			;;
+		get_stats)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_get_stats $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                               . /etc/rc.d/ath_wlan_get_stats $@
+                        else
+                                echo "Usage: /etc/rc.d/rc.bringup_wlan get stats vap_index"
+                        fi
+
+         		fi
+			;;
+		get_ap_dyn_info)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_get_ap_dyn_info $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_get_ap_dyn_info $@
+                        else
+                                echo "Usage: /etc/rc.d/rc.bringup_wlan get_ap_dyn_info vap_index"
+                        fi
+   
+         		fi
+			;;
+		get_assoc_dev)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_get_assoc $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_get_assoc $@
+                        else
+                                echo "Usage: /etc/rc.d/rc.bringup_wlan get_assoc_dev vap_index"
+                        fi
+
+         		fi
+			;;
+		get_radio_dyn_info)
+			shift
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_get_radio_dyn_info $@
+                        elif [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                         . /etc/rc.d/ath_wlan_get_radio_dyn_info
+         		fi
+			;;
+		get_wps_dyn_info)
+			shift
+                        if [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                        if [ $# -eq 1 ]; then
+                               . /etc/rc.d/ath_wlan_get_wps_dyn_info $@
+                        else
+                                echo "Usage: /etc/rc.d/rc.bringup_wlan get_wps_dyn_info vap_index"
+                        fi
+          
+			fi
+			;;
+		get_wps_regs_dyn_info)
+			shift
+                        if [ "$CONFIG_FEATURE_IFX_WIRELESS_ATHEROS" = "1" ]; then
+                          if [ $# -eq 1 ]; then
+                                . /etc/rc.d/ath_wlan_get_wps_regs_dyn_info $@
+                        else
+                                echo "Usage: /etc/rc.d/rc.bringup_wlan get_wps_regs_dyn_info vap_index"
+                        fi
+ 
+        		fi
+			;;
+		vb_config_mod)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_sta_config 0
+			fi
+			;;
+		vb_wmm_config)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wmm_modify $@
+			fi
+			;;
+		vb_trigger_connect)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_connect				
+			fi
+			;;
+		vb_trigger_disconnect)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_disconnect				
+			fi
+			;;
+		vb_get_wlan_link_status)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_get_link_status 0
+			fi
+			;;
+		vb_get_wlan_scan_results)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_scan $@
+			fi
+			;;
+		*)
+			echo $"Usage $0 {load|capability|start|stop|remove|sec_mod|wmm_mod|wps_conf|wps_trigger_pbc|wps_trigger_pin|get_wps_pin|restore_wps_pin|reset_wps|generate_wps_pin|get_wps_profile|mac_ctrl_mod|get_stats|get_ap_dyn_info|get_assoc_dev|get_radio_dyn_info|get_wps_dyn_info|get_wps_regs_dyn_info|vb_config_mod|vb_wmm_config|vb_trigger_connect|vb_trigger_connect|vb_get_wlan_link_status|vb_get_wlan_scan_results}"
+			#exit 1
+	esac
+
+fi

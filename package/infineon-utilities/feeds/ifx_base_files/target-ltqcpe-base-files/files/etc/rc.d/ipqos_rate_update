@@ -1,0 +1,178 @@
+#!/bin/sh
+if [ ! "$ENVLOADED" ]; then
+        if [ -r /etc/rc.conf ]; then
+                . /etc/rc.conf 2> /dev/null
+                ENVLOADED="1"
+        fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+        if [ -r /etc/rc.d/config.sh ]; then
+                . /etc/rc.d/config.sh 2> /dev/null
+                CONFIGLOADED="1"
+        fi
+fi
+
+DOWNSTREAM_BW_RESERVED_HIGHPRIO=200
+
+case "$wanphy_phymode" in
+	0)	
+		TC_ACTION=1 #TC rules CHANGE action for TCP ACK Prio
+		ADSL_MODE_ON=1  #Denotes ADSL Mode
+		case "$wanphy_tc" in
+			0)
+				#wan mode is ATM
+                ACTUAL_UPSTREAM_RATE="$1"
+                ACTUAL_DOWNSTREAM_RATE="$2"
+                BANDWIDTH_RATIO=80
+               	#RATE_FOR_DOWNSTREAM_OTHERS="2000kbit"
+		RATE_FOR_DOWNSTREAM_OTHERS=`expr $ACTUAL_DOWNSTREAM_RATE - $DOWNSTREAM_BW_RESERVED_HIGHPRIO`$RATE_UNIT
+                RATE_UNIT=kbit
+				;;
+			1)
+				#wan mode is PTM
+                ACTUAL_UPSTREAM_RATE="$1"
+                ACTUAL_DOWNSTREAM_RATE="$2"
+                BANDWIDTH_RATIO=80
+                #RATE_FOR_DOWNSTREAM_OTHERS="2000kbit"
+		RATE_FOR_DOWNSTREAM_OTHERS=`expr $ACTUAL_DOWNSTREAM_RATE - $DOWNSTREAM_BW_RESERVED_HIGHPRIO`$RATE_UNIT
+                RATE_UNIT=kbit
+				;;
+		esac
+		;;
+	1)
+		ADSL_MODE_ON=0
+		#wan mode is MII0
+		#if [ -n "$CONFIG_TARGET_LTQCPE_PLATFORM_AR9" -a "$CONFIG_TARGET_LTQCPE_PLATFORM_AR9" = "1" ]; then
+                	#ACTUAL_UPSTREAM_RATE="1048576"
+	                #ACTUAL_DOWNSTREAM_RATE="1048576"
+		#else
+                	#ACTUAL_UPSTREAM_RATE="102400"
+	                #ACTUAL_DOWNSTREAM_RATE="102400"
+		#fi
+                ACTUAL_UPSTREAM_RATE="$1"
+	        ACTUAL_DOWNSTREAM_RATE="$2"
+                BANDWIDTH_RATIO=100
+                #RATE_FOR_DOWNSTREAM_OTHERS="2000kbit"
+		RATE_FOR_DOWNSTREAM_OTHERS=`expr $ACTUAL_DOWNSTREAM_RATE - $DOWNSTREAM_BW_RESERVED_HIGHPRIO`$RATE_UNIT
+                RATE_UNIT=kbit
+		;;
+	2)
+		ADSL_MODE_ON=0
+		#wan mode is MII1
+                #ACTUAL_UPSTREAM_RATE="1048576"
+                #ACTUAL_DOWNSTREAM_RATE="1048576"
+                ACTUAL_UPSTREAM_RATE="$1"
+                ACTUAL_DOWNSTREAM_RATE="$2"
+                BANDWIDTH_RATIO=100
+                #RATE_FOR_DOWNSTREAM_OTHERS="2000kbit"
+		RATE_FOR_DOWNSTREAM_OTHERS=`expr $ACTUAL_DOWNSTREAM_RATE - $DOWNSTREAM_BW_RESERVED_HIGHPRIO`$RATE_UNIT
+                RATE_UNIT=kbit
+		;;
+	3)
+		ADSL_MODE_ON=0
+		#wan mode is PTM
+                ACTUAL_UPSTREAM_RATE="$1"
+                ACTUAL_DOWNSTREAM_RATE="$2"
+                BANDWIDTH_RATIO=100
+                #RATE_FOR_DOWNSTREAM_OTHERS="2000kbit"
+		RATE_FOR_DOWNSTREAM_OTHERS=`expr $ACTUAL_DOWNSTREAM_RATE - $DOWNSTREAM_BW_RESERVED_HIGHPRIO`$RATE_UNIT
+                RATE_UNIT=kbit
+		;;
+esac
+
+#echo "Rate update: up rate = $ACTUAL_UPSTREAM_RATE"
+#echo "Rate update: down rate = $ACTUAL_DOWNSTREAM_RATE"
+
+
+# Run ipqos tem scripts
+if [ -f /tmp/ipqos_init_status ]; then
+	. /tmp/ipqos_init_status
+fi
+
+# write rates to file
+echo "IPQOS_UP_RATE=\"$ACTUAL_UPSTREAM_RATE\"" > /tmp/ipqos_rates
+echo "IPQOS_DOWN_RATE=\"$ACTUAL_DOWNSTREAM_RATE\"" >> /tmp/ipqos_rates
+
+
+MAX_UPSTREAM_RATE_TMP=`expr $ACTUAL_UPSTREAM_RATE \* $BANDWIDTH_RATIO / 100`
+MAX_DOWNSTREAM_RATE_TMP=`expr $ACTUAL_DOWNSTREAM_RATE \* $BANDWIDTH_RATIO / 100`
+#/bin/sed -i -e "s,^up_link_rate=.*,up_link_rate=\"$MAX_UPSTREAM_RATE_TMP\",g" /tmp/system_status
+#/bin/sed -i -e "s,^down_link_rate=.*,down_link_rate=\"$MAX_DOWNSTREAM_RATE_TMP\",g" /tmp/system_status
+/usr/sbin/status_oper -u -f /tmp/system_status SET "qos_bk" "up_link_rate" "$MAX_UPSTREAM_RATE_TMP" "down_link_rate" "$MAX_DOWNSTREAM_RATE_TMP"
+# Updated rate is stored in /tmp/sys_status we need not update in rc.conf
+#if [ $qm_portRateLimEnab -ne 1 ]; then
+	#/usr/sbin/status_oper -u -f /etc/rc.conf SET "qos_queuemgmt" "qm_upPortRateLim" "$MAX_UPSTREAM_RATE_TMP"
+#fi
+
+MAX_UPSTREAM_RATE=`expr $ACTUAL_UPSTREAM_RATE \* $BANDWIDTH_RATIO / 100`$RATE_UNIT
+MAX_DOWNSTREAM_RATE=`expr $ACTUAL_DOWNSTREAM_RATE \* $BANDWIDTH_RATIO / 100`$RATE_UNIT
+RATE_FOR_DOWNSTREAM_OTHERS=`expr $RATE_FOR_DOWNSTREAM_OTHERS \* $BANDWIDTH_RATIO / 100`$RATE_UNIT
+
+	#Update Flags
+	queuecfg -u 0/0
+
+	#Update Rates
+	queuecfg -r 0/0
+
+
+# Check qos is enabled or not
+#if [ $qm_enable -eq 0 ]; then
+#echo"exiting qosenable eq 0"
+#        exit 0
+#fi
+
+# Check ipqos_init executed
+#if [ -z $IPQOS_INIT_STATUS ]; then
+#echo"exiting initstatus not there"
+#	exit 0
+#fi
+#if [ $IPQOS_INIT_STATUS -eq 0 ]; then
+#echo"exiting initstatus eq 0"
+#	exit 0
+#fi
+
+#Call 'ipqos_tcp_ack_prio' to change TC HTB hierarchy rates for TCP ACK Prioritization
+if [ $ADSL_MODE_ON -eq 1 -a $qm_enable -eq 0 -a $qm_tcpackprio -eq 1 ]; then	
+	. /etc/rc.d/ipqos_tcp_ack_prio $TC_ACTION
+fi
+
+
+if [ ! -z "$IPQOS_INIT_STATUS" ] && [ $qm_enable -eq 1 -a $IPQOS_INIT_STATUS -eq 1 ]; then
+# if ipqos_init is done, update the queues with changed rates
+
+# Modify rates of Downstream direction queues
+
+	tc class change dev imq1 parent 1: classid 1:1 htb rate $MAX_DOWNSTREAM_RATE
+	tc class change dev imq1 parent 1:1 classid 1:41 htb rate $RATE_FOR_DOWNSTREAM_OTHERS ceil $MAX_DOWNSTREAM_RATE prio 2
+
+# Modify rates of SIP, RTP, Management traffic Queues
+
+	MGMT_QUEUE_CHANGE=0
+	if [ ! -z $CONFIG_PACKAGE_IFX_VOIP ]; then
+		if [ $CONFIG_PACKAGE_IFX_VOIP -eq 1 ]; then
+		# Modify downstream direction queues
+		tc class change dev imq1 parent 1:1 classid 1:21 htb rate 80kbit ceil $MAX_DOWNSTREAM_RATE prio 0
+		tc class change dev imq1 parent 1:1 classid 1:31 htb rate 80kbit ceil $MAX_DOWNSTREAM_RATE prio 1
+		MGMT_QUEUE_CHANGE=1
+		fi
+	fi
+
+	# modify the management queue if it is not modified
+	if [ $MGMT_QUEUE_CHANGE -eq 0 ]; then
+		if [ ! -z $CONFIG_PACKAGE_IFX_DEVM ]; then
+		if [ $CONFIG_PACKAGE_IFX_DEVM -eq 1 ]; then
+		# Modify downstream direction queues
+		tc class change dev imq1 parent 1:1 classid 1:31 htb rate 80kbit ceil $MAX_DOWNSTREAM_RATE prio 1
+		fi
+		fi
+	fi
+
+
+
+# Modify rates of UPSTREAM direction queues
+	#Configure Queues
+	queuecfg -q 0/0
+fi
+
+

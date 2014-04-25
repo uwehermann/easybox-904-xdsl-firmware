@@ -1,0 +1,22 @@
+[global]
+	netbios name = |NAME| 
+	workgroup = |WORKGROUP|
+	server string = |DESCRIPTION|
+	syslog = 10
+	encrypt passwords = true
+#	passdb backend = smbpasswd
+	obey pam restrictions = yes
+	socket options = TCP_NODELAY
+#	unix charset = ISO-8859-1
+	unix charset = UTF-8
+	display charset = UTF-8
+	dos charset = UTF-8
+	preferred master = yes
+	os level = 20
+	security = |SHARE|
+	Map to guest = Bad User
+	username map = /etc/samba/smbusers
+#	guest account = root
+#	invalid users = root
+#	smb passwd file = /etc/samba/smbpasswd
+#	interfaces = |INTERFACES|

@@ -1,0 +1,200 @@
+#!/bin/sh
+# Copyright (C) 2008 OpenWrt.org
+
+START=43
+
+TRUST_HOST_FILE=/tmp/firewall.trust
+. /usr/sbin/iptables_utility.sh
+
+start()
+{
+	echo "firewall init start"
+	if [ `/bin/grep -c -i bridge /proc/cmdline` -ge 1 ] ; then
+		return
+	fi
+
+	. /lib/firewall/uci_firewall.sh
+	fw_init
+	[ -f /lib/firewall/firewall.user ] && . /lib/firewall/firewall.user
+	[ -f /lib/firewall/firewallv6.user ] && . /lib/firewall/firewallv6.user
+
+	#port mapping to avoid those service from lan using 5060
+	ipt_shift_port
+	rm ${TRUST_HOST_FILE}
+	gen_trust_file 0
+	[ -f ${TRUST_HOST_FILE} ] && (. ${TRUST_HOST_FILE} >/dev/null 2>&1)
+	gen_trust_file 1
+	[ -f ${TRUST_HOST_FILE} ] && (. ${TRUST_HOST_FILE} >/dev/null 2>&1)
+	echo "firewall init end"
+}
+
+stop()
+{
+	. /lib/firewall/uci_firewall.sh
+	fw_stop
+}
+
+restart()
+{
+	stop
+	start
+}
+
+# $1: 0-del 1-add
+gen_trust_file()
+{
+	local	OP
+	local	MAX
+	local	CNT
+
+	if [ -z "$1" ] ; then
+		return 0
+	fi
+
+	if [ "$1" == 0 ] ; then
+		OP="-D"
+	else
+		OP="-I"
+	fi
+
+	MAX=`umngcli get count@trustip`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	if [ ! -f ${TRUST_HOST_FILE} ]; then
+		echo '. /usr/sbin/iptables_utility.sh' >> ${TRUST_HOST_FILE}
+		echo 'IPT="iptables"' > ${TRUST_HOST_FILE}
+	fi
+	CNT=1
+	echo 'ipt_lock_res' >> ${TRUST_HOST_FILE}
+	while [ "$CNT" -le "$MAX" ] ; do
+		IP=`umngcli get ip${CNT}@trustip`
+		if [ -n "$IP" ] ; then
+			echo '${IPT}' "${OP} INPUT -p all --source ${IP} -j ACCEPT" >> ${TRUST_HOST_FILE}
+		fi
+		let CNT=$CNT+1
+	done
+	echo 'ipt_unlock_res' >> ${TRUST_HOST_FILE}
+}
+
+# $1: <ip address>[/submask_bit]
+add_trust()
+{
+	local	MAX
+
+	if [ -z "$1" ] ; then
+		return 0
+	fi
+
+	MAX=`umngcli get count@trustip`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	let MAX=$MAX+1
+
+	umngcli set ip${MAX}@trustip="$1"
+
+	umngcli set count@trustip=$MAX
+
+	return 0
+}
+
+# $1: <ip address>[/submask_bit]
+del_trust()
+{
+	local	MAX
+
+	if [ -z "$1" ] ; then
+		return 0
+	fi
+
+	MAX=`umngcli get count@trustip`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	CNT=1
+	while [ "$CNT" -le "$MAX" ] ; do
+		IP=`umngcli get ip${CNT}@trustip`
+		if [ "$1" == "$IP" ] ; then
+			`umngcli unset ip${CNT}@trustip`
+			break
+		fi
+		let CNT=$CNT+1
+	done
+
+	let NEXT=$CNT+1
+	while [ "$NEXT" -le "$MAX" ] ; do
+		IP=`umngcli get ip${NEXT}@trustip`
+		if [ -n "$IP" ] ; then
+			umngcli set ip${CNT}@trustip="$IP"
+			let CNT=$CNT+1
+		fi
+		let NEXT=$NEXT+1
+	done
+
+	let CNT=$CNT-1
+	umngcli set count@trustip="$CNT"
+
+	let CNT=$CNT+1
+	while [ "$CNT" -le "$MAX" ] ; do
+		`umngcli unset ip${CNT}@trustip`
+		let CNT=$CNT+1
+	done
+
+	return 0
+}
+
+#
+flush_trust()
+{
+	umngcli unset *@trustip
+
+	umngcli set count@trustip=0
+}
+
+#
+list_trust()
+{
+	local	MAX
+	local	CNT
+
+	MAX=`umngcli get count@trustip`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	CNT=0
+	while [ "$CNT" -le "$MAX" ] ; do
+		IP=`umngcli get ip${CNT}@trustip`
+		if [ -n "$IP" ] ; then
+			echo ${IP}
+		fi
+		let CNT=$CNT+1
+	done
+}
+
+
+case "$1" in
+#	"boot")			start &			;;
+	"boot")			start 			;;
+	"start")		start &			;;
+	"stop")			stop			;;
+	"restart")		restart &		;;
+	"add-trust")	add_trust $2 &	;;
+	"del-trust")	del_trust $2 &	;;
+	"flush-trust")	flush_trust &	;;
+	"list-trust")	list_trust $2 &	;;
+	*)
+				echo $0 'boot    - setup and start firewall function'
+				echo $0 'start   - start firewall function'
+				echo $0 'stop    - stop firewall function'
+				echo $0 'restart - restart firewall function'
+				echo $0 'add-trust <ip>[/netmask_bit] - add a trusted host or trusted subnet on WAN side'
+				echo $0 'del-trust <ip>[/netmask_bit] - remove a trusted host or trusted subnet on WAN side'
+				echo $0 'flush-trust                  - remove all trusted hosts or trusted subnets on WAN side'
+				echo $0 'list-trust                   - list all trusted hosts or trusted subnets on WAN side'
+				;;
+esac

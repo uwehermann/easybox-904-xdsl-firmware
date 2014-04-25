@@ -1,0 +1,110 @@
+# Copyright (C) 2006 OpenWrt.org
+
+config interface loopback
+	option ifname	lo
+	option proto	static
+	option ipaddr	127.0.0.1
+	option netmask	255.0.0.0
+
+config interface lan
+	option up		1
+	option ifname	eth0
+	option type 	bridge
+	option proto	static
+	option ipaddr	192.168.2.1
+	option netmask	255.255.255.0
+#	option ip6addr	"fc00::/64"
+
+config alias
+	option interface	lan
+	option proto		static
+	option ipaddr		0.0.0.0
+	option netmask		255.255.255.248
+
+config interface lan1
+	option up	0
+	option ifname	eth0.2
+	option type 	bridge
+	option proto	static
+	option ipaddr	192.168.3.1
+	option netmask	255.255.255.0
+#	option ip6addr	"fc00::/64"
+
+config interface lan2
+	option up	0
+	option ifname	eth0.3
+	option type 	bridge
+	option proto	static
+	option ipaddr	192.168.4.1
+	option netmask	255.255.255.0
+#	option ip6addr	"fc00::/64"
+
+config interface lan3
+	option up	0
+	option ifname	eth0.4
+	option type 	bridge
+	option proto	static
+	option ipaddr	192.168.5.1
+	option netmask	255.255.255.0
+#	option ip6addr	"fc00::/64"
+
+config interface wan100
+	option up		1
+	option ifname	eth1
+	option proto	static
+	option ipaddr	0.0.0.0
+	option netmask	255.255.255.0
+#	option ip6addr	"fc00::/64"
+
+config atm-bridge000
+    option unit		0
+    option encaps	llc
+    option vpi		1
+    option vci		32
+    option payload  bridged
+
+config atm-bridge001
+    option unit		1
+    option encaps	llc
+    option vpi		2
+    option vci		32
+    option payload  bridged
+
+config atm-bridge002
+    option unit		2
+    option encaps	llc
+    option vpi		3
+    option vci		32
+    option payload  bridged
+
+config interface wan000
+	option up			1
+    option ifname       nas0
+    option proto        pppoe
+    option username    "pppoe"
+    option password    "abcABC123"
+
+config interface wan001
+	option up			0
+    option ifname       nas1
+    option proto        pppoe
+    option username    "pppoe"
+    option password    "abcABC123"
+
+config interface wan002
+	option up			0
+    option ifname       nas2
+    option proto        pppoe
+    option username    "pppoe"
+    option password    "abcABC123"
+
+config interface wan200
+	option up		1
+	option ifname	ppp200
+	option proto	"3g"
+	option device	"/dev/ttyUSB0"
+	option apn	"Internet"
+	option service	"hsdpa" # or cdma, evdo,umts_only, gprs_only
+	option pincode	"0000"
+	option mtu	"1492"
+

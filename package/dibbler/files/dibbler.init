@@ -1,0 +1,65 @@
+#!/bin/sh
+# Copyright (C) 2008 Arcadyan
+
+START=50
+DIBBLER_SERVER_BIN="/usr/sbin/dibbler-server"
+
+start() {
+    LANif=br-lan
+    LLA=`ifconfig $LANif | grep 'Scope:Link' | awk '{print $3}' | awk -F/ '{print $1}'`
+
+    #prepare dir and scripts for dibbler running
+    [ -d /var/etc/dibbler ] || {
+        mkdir -p /var/etc/dibbler
+        mkdir -p /var/log/dibbler
+    
+        #todo: this should be replaced such that client.conf and server.conf are generated
+        #      based on such as /etc/config/dibbler/client and /etc/config/dibbler/server
+        cp /etc/config/dibbler/* /var/etc/dibbler/
+        
+        mkdir -p /var/lib/dibbler
+        ln -s /etc/dibbler/scripts/* /var/lib/dibbler/
+        
+        ln -s /tmp/resolv.conf /var/etc/dibbler/resolv.conf
+    }
+    
+    #start dibbler server (client starts in ipv6-up)
+    [ -f /etc/config/dibbler/server.conf ] && {
+        #check if it's needed to switch to stateless temporarily
+        COMMENTED=^[[:blank:]]*#
+        grep -v "$COMMENTED" /etc/config/dibbler/server.conf | grep -q 'stateless'
+        if [ $? -eq 1 ]; then
+            STATELESS="\nstateless"
+            eval "sed -e '/^[[:blank:]]*preference/a\#tag-to-ins' /var/etc/dibbler/server.conf | sed 's!^#tag-to-ins!$STATELESS!' > /var/etc/dibbler/server.conf.tmp"        
+            mv -f /var/etc/dibbler/server.conf.tmp /var/etc/dibbler/server.conf
+        fi
+        
+        #replace the default dns-server paramater
+        eval "sed -e 's/option dns-server.*/option dns-server $LLA/g' /var/etc/dibbler/server.conf > /var/etc/dibbler/server.conf.tmp"
+        mv -f /var/etc/dibbler/server.conf.tmp /var/etc/dibbler/server.conf
+        
+    	eval "$DIBBLER_SERVER_BIN start"
+    }
+}
+
+stop() {
+    #stop dibbler server (client stops in ipv6-down)
+    [ -f /etc/config/dibbler/server.conf ] && {
+    	eval "$DIBBLER_SERVER_BIN stop"
+    }
+}
+
+
+case "$1" in
+	"boot")		start &	;;
+	"start")	start &	;;
+	"stop")		stop &	;;
+	"restart")	(stop ; start) & ;;
+	*)
+				echo $0 'boot     - setup and start dibbler / DHCPv6 function'
+				echo $0 'start    - start dibbler / DHCPv6 function'
+				echo $0 'stop     - stop dibbler / DHCPv6 function'
+				echo $0 'restart  - restart dibbler / DHCPv6 function'
+				;;
+esac
+

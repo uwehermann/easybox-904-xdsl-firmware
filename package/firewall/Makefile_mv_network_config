@@ -1,0 +1,103 @@
+#
+# Copyright (C) 2008 OpenWrt.org
+#
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=firewall
+
+PKG_VERSION:=1
+PKG_RELEASE:=3
+
+include $(INCLUDE_DIR)/package.mk
+
+#  $(warning [htf] fw1: [$(CONFIG_PACKAGE_GIT_CLONE_URI)/$(PKG_NAME)])
+#  $(warning [htf] fw2: [$(shell ls $(CONFIG_PACKAGE_GIT_CLONE_URI) | grep $(PKG_NAME))])
+#  $(warning [htf] fw3: [$(PKG_BUILD_DIR)])
+
+
+ifneq "$(shell  git --git-dir=$(CONFIG_PACKAGE_GIT_CLONE_URI)/$(PKG_NAME)/ log 2> /dev/null | grep commit)" ""
+  # git db exist
+  # $(warning [htf] [clone git db][$(PKG_BUILD_DIR)])
+  # $(warning [htf] [git clone --quiet $(CONFIG_PACKAGE_GIT_CLONE_URI)/$(PKG_NAME) $(PKG_BUILD_DIR)])
+  # $(shell  rm -Rf $(PKG_BUILD_DIR) )
+  # $(shell  git clone --quiet $(CONFIG_PACKAGE_GIT_CLONE_URI)/$(PKG_NAME) $(PKG_BUILD_DIR))
+  # $(shell  touch $(PKG_BUILD_DIR)/.git_clone_ok)
+  USE_GIT:=y
+  PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.bz2
+  PKG_SOURCE_URL:=git://$(CONFIG_PACKAGE_GIT_CLONE_URI)/$(PKG_NAME)
+  #PKG_SOURCE_VERSION:="fake"
+  PKG_SOURCE_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
+
+  FILE:=$(PKG_SOURCE)
+  URL:=$(PKG_SOURCE_URL)
+  PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
+  PROTO:=$(PKG_SOURCE_PROTO)
+  VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
+  MD5SUM:=$(PKG_MD5SUM)
+else
+  # git db does not exist
+  $(warning [htf] [git db does not exist])
+endif
+
+
+
+define Package/firewall
+  SECTION:=net
+  CATEGORY:=Base system
+  URL:=http://openwrt.org/
+  TITLE:=OpenWrt firewall
+  DEPENDS:=+iptables-mod-conntrack +iptables-mod-nat
+endef
+
+define Package/firewall/description
+ uci based firewall for openwrt
+endef
+
+define Build/Compile
+#	echo [htf firewall] Build/Compile
+	true
+endef
+
+define Package/firewall/conffiles
+/etc/config/firewall
+endef
+
+
+#$(warning [htf] $(PKG_BUILD_DIR)/files/firewall.mk)
+
+define Package/firewall/install
+#	echo [htf firewall] Package/firewall/install
+#	ls $(PKG_BUILD_DIR)
+  ifneq "$(USE_GIT)" ""
+#	$(call Package/firewall/gitinstall, $(PKG_BUILD_DIR), $(1))
+#	echo [htf firewall] 2. call Package/firewall/gitinstall
+	make -C $(PKG_BUILD_DIR)/files
+  else
+	echo [htf firewall] .git_clone_ok does not exist
+	#create a folder for external module scripts
+	$(INSTALL_DIR) $(1)/etc/config/firewallExt
+	$(INSTALL_DIR) $(1)/lib/firewall
+	$(INSTALL_DATA) ./files/uci_firewall.sh $(1)/lib/firewall
+	$(INSTALL_DIR) $(1)/usr/sbin
+	$(INSTALL_BIN) ./files/rstFirewallFst.sh $(1)/usr/sbin/rstFirewallFst.sh
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_DATA) ./files/firewall.config $(1)/etc/config/firewall
+	$(INSTALL_DATA) ./files/firewall_adsl.config $(1)/lib/firewall/firewall_adsl
+	$(INSTALL_DATA) ./files/firewall_vdsl.config $(1)/lib/firewall/firewall_vdsl
+	$(INSTALL_DATA) ./files/firewall_ether.config $(1)/lib/firewall/firewall_ether
+#	$(INSTALL_DATA) ./files/firewall_3g.config $(1)/lib/firewall/firewall_3g
+	$(INSTALL_DATA) ./files/firewall_lte.config $(1)/lib/firewall/firewall_lte
+	$(INSTALL_DATA) ./files/firewall.user $(1)/lib/firewall/firewall.user
+	$(INSTALL_DIR) $(1)/etc/init.d/
+	$(INSTALL_BIN) ./files/firewall.init $(1)/etc/init.d/firewall
+	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface
+	$(INSTALL_BIN) ./files/20-firewall $(1)/etc/hotplug.d/iface
+#	$(INSTALL_DIR) $(1)/etc
+#	$(INSTALL_DATA) ./files/firewall.user $(1)/etc
+  endif
+endef
+
+$(eval $(call BuildPackage,firewall))

@@ -1,0 +1,36 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+START=50
+
+#DEFAULT=/etc/default/pppoe-relay
+
+start() {
+#	[ -f $DEFAULT ] && . $DEFAULT
+#	pppoe-relay $OPTIONS
+
+	if [ "`umngcli get ppp_pass_thru@system`" != "1" ] ; then
+		return
+	fi
+
+	WANIF=`wandataif.sh 1 2>&-`
+
+	if [ -n "$WANIF" ] ; then
+		pppoe-relay -C "br-lan" -S "$WANIF"
+	fi
+}
+
+stop() {
+	killall pppoe-relay
+}
+
+
+case "$1" in
+	"boot")		start	;;
+	"start")	start	;;
+	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start PPPoE relay function'
+				echo $0 'start - start PPPoE relay function'
+				echo $0 'stop  - stop PPPoE relay function'
+				;;
+esac

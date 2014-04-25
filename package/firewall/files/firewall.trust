@@ -1,0 +1,3 @@
+IPT="iptables"
+
+#$IPT -I INPUT -p all --source 10.21.0.212/24 -j ACCEPT

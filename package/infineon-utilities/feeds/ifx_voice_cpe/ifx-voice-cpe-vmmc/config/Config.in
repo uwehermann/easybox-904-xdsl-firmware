@@ -1,0 +1,108 @@
+menu "advanced configuration (for developers)"
+   depends on PACKAGE_ifx-voice-cpe-vmmc
+config  LTQ_VOICE_CPE_VMMC_ADDITIONAL_FLAGS
+	string "additional configuration arguments"
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	default ""
+	help
+		additional configuration arguments (for developers)
+endmenu
+
+choice
+   depends on PACKAGE_ifx-voice-cpe-vmmc
+   prompt "device selection"
+   default LTQ_VOICE_CPE_VMMC_WITH_DEVICE_DANUBE if (TARGET_ifxcpe_platform_danube || TARGET_ltqcpe_platform_danube)
+   default LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9    if (TARGET_ifxcpe_platform_ar9 || TARGET_ltqcpe_platform_ar9)
+   default LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9    if (TARGET_ifxcpe_platform_vr9 || TARGET_ltqcpe_platform_vr9)
+   help
+      Select the target device.
+
+   config LTQ_VOICE_CPE_VMMC_WITH_DEVICE_DANUBE
+      bool "Danube, Twinpass, Vinax"
+	  select PACKAGE_ifx-voice-cpe-vmmc-firmware-danube
+	  select PACKAGE_ifx-voice-cpe-vmmc-coef-danube
+
+   config LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9
+      bool "AR9 family"
+     select PACKAGE_ifx-voice-cpe-vmmc-firmware-ar9
+	  select PACKAGE_ifx-voice-cpe-vmmc-coef-ar9
+
+   config LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9
+      bool "VR9 family"
+	  select PACKAGE_ifx-voice-cpe-vmmc-firmware-vr9
+	  select PACKAGE_ifx-voice-cpe-vmmc-coef-vr9
+endchoice
+
+config LTQ_VOICE_CPE_VMMC_PMC
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	depends on (LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9 || LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9)
+	bool "Power Management Control support"
+	default n
+	help
+		Register with the Power Management Control Unit (PMCU) and send
+                status reports on changes of voice-FW activity.
+
+config LTQ_VOICE_CPE_VMMC_PMU
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	depends on (LTQ_VOICE_CPE_VMMC_WITH_DEVICE_DANUBE || LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9 || LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9)
+	bool "Power Management Unit support"
+	default y
+	help
+		Option to use Power Management Unit functionality.
+
+config LTQ_VOICE_CPE_VMMC_DISABLE_DECT_NIBBLE_SWAP
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	bool "disable DECT nibble swap"
+	default n
+	help
+		Option to disable DECT nibble swap for COSIC modem (for backward compatibility only).
+
+config LTQ_VOICE_CPE_VMMC_PHONE_DETECTION
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	depends on (LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9 || LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9)
+	bool "FXS Phone Detection"
+	select LTQ_VOICE_CPE_TAPI_PHONE_DETECTION
+	default n
+	help
+		LL-support for the feature "Phone Detection" for FXS lines.
+
+config LTQ_VOICE_CPE_VMMC_CONT_MEASUREMENT
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	depends on (LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9 || LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9)
+	bool "Continuous Analog Line Measurement"
+	select LTQ_VOICE_CPE_TAPI_CONT_MEASUREMENT
+	default n
+	help
+		Include the feature "Continuous Measurement" on FXS lines.
+
+config LTQ_VOICE_CPE_VMMC_EVENT_LOGGER
+	depends on PACKAGE_ifx-voice-cpe-vmmc && +PACKAGE_ifx-evtlog
+	bool "Event logger support"
+	default n
+	help
+		Option to enable detailed traces between drv_vmmc and the voice FW
+		- for debugging only
+		- requires package ifx-evtlog
+
+config LTQ_VOICE_CPE_VMMC_MPS_HISTORY_SIZE
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	string "MPS history buffer in words (0<=size<=512)"
+	default "128"
+	help
+		MPS history buffer (default=128 words, maximum=512 words, 0=disable)
+		To opimize the memory footprint in RAM, you might want to set the
+		buffer size to 0.
+
+config LTQ_VOICE_CPE_VMMC_SSLIC_FXO_ACTIVATE
+	depends on PACKAGE_ifx-voice-cpe-vmmc
+	depends on (LTQ_VOICE_CPE_VMMC_WITH_DEVICE_AR9 || LTQ_VOICE_CPE_VMMC_WITH_DEVICE_VR9)
+	bool "Activate SmartSLIC FXO ports upon TAPI init"
+	default n
+	help
+		Option to activate FXO ports connected to a SmartSLIC by default.
+                This should be disabled unless there is an FXO chip connected to
+                the GPIOs of the SmartSLIC. Otherwise the SmartSLIC may consume
+                quite some processor power depending on the signals on the GPIO pins
+                of the SmartSLIC.
+                Do not set for the LANTIQ AR9, VR9 or Danube Family boards.
+                Set it for the LANTIQ Compact GW188 and AR10 Family boards.

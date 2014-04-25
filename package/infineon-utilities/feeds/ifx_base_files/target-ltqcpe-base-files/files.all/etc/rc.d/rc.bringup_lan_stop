@@ -1,0 +1,93 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+#stop(){
+        if  [ $CONFIG_FEATURE_IFX_WIRELESS = "1" ]; then
+                . /etc/rc.d/rc.bringup_wlan stop
+	fi
+
+	if  [ $CONFIG_FEATURE_DHCP_SERVER -a $CONFIG_FEATURE_DHCP_SERVER = "1" ]; then
+		i=0
+		while [ $i -lt $lan_main_Count ]
+		do
+			eval dhcp_mode='$lan_main_'$i'_dhcpMode'
+			#if [ "$dhcp_mode" = "server" -a -f /var/run/udhcpd.pid ]; then
+			if [ "$dhcp_mode" = "server" -o  "$dhcp_mode" = "relay" -a "$dhcp_enable" = "1" ]; then
+				. /etc/init.d/udhcpd stop > /dev/null
+			fi
+			i=$(( $i + 1 ))
+		done
+	fi
+
+
+	if [ -f /usr/sbin/naptcfg ]; then
+		i=0
+		while [ $i -lt $lan_main_Count ]
+		do
+			eval iface='$lan_main_'$i'_interface'
+			/usr/sbin/naptcfg --DELLAN $iface
+			i=$(( $i + 1 ))	
+		done
+	fi
+#	LAN="`/etc/rc.d/get_lan_if`"
+	. /etc/rc.d/get_lan_if
+	LAN=$LAN_IFNAME
+	if  [ "$CONFIG_FEATURE_DIFFSERV" = "1" ]; then
+		if [ "$QOS_ENABLE" = 1 -a "$DIFFSERV_VIRTUAL_SERVER" = "1" ]; then
+		. /etc/rc.d/init.d/qos stop_lan
+		fi
+	fi
+	/usr/sbin/status_oper SET Lan1_IF_Info STATUS DOWN
+
+	if [ "$CONFIG_FEATURE_INETD" = "1" ]; then
+		#start inetd superserver
+		. /etc/init.d/inetd restart
+	fi
+
+	while [ $i -lt $lan_main_Count ]
+	do
+		eval addr_type='$'lan_main_'${i}'_ipAddrType
+		if [ -f /etc/rc.d/udhcpc_lan.script -a "$addr_type" = "1" ]; then
+			. /etc/rc.d/init.d/udhcpc release 0
+			. /etc/rc.d/init.d/udhcpc stop 0
+		fi
+		i=$(( $i + 1 ))
+	done
+
+	if [ -n "$CONFIG_TARGET_LTQCPE_PLATFORM_AR9_VB" ]; then
+		eval dhcpcEna='$'gbc_dhcpClntEna
+		if [ -f /etc/rc.d/udhcpc_lan.script -a "$dhcpcEna" = "1" ]; then
+			. /etc/rc.d/init.d/udhcpc release 0
+			. /etc/rc.d/init.d/udhcpc stop 0
+		fi
+	fi
+
+	# PPA 
+	eval g_wan_phy_mode='$'wanphy_phymode
+
+
+	if [ "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_A5_BUILTIN" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_A5_MOD" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_D5_BUILTIN" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_D5_MOD" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_A4_BUILTIN" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_A4_MOD" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_D4_BUILTIN" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_D4_MOD" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_E5_BUILTIN" = "11" -o "1$CONFIG_PACKAGE_KMOD_LTQCPE_PPA_E5_MOD" = "11" ]; then
+		if [ "$g_wan_phy_mode" = "1" ]; then # Eth on MII0
+			# FIXME: eth0.2 will be removed and lan intf will be derived dynamically from rc.conf 
+			. /etc/rc.d/ppa_config.sh dellan eth0.2
+		else
+			. /etc/rc.d/ppa_config.sh dellan eth0
+		fi
+
+		. /etc/rc.d/ppa_config.sh dellan $LAN_IFNAME
+	fi
+
+#}

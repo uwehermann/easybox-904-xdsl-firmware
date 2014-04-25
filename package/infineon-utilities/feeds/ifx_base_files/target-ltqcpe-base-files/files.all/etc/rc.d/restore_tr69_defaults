@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# 1. read rc.conf from customized default config
+# 2. if reading rc.conf is successful, copy rc.conf to sysconfig
+# 3. else read rc.conf from rootfs and copy to sysconfig as well as factoryconfig
+
+/usr/sbin/read_img factoryconfig /ramdisk/flash/rc.conf.gz
+
+if [ $? -eq 0 ]; then
+   /usr/sbin/upgrade /ramdisk/flash/rc.conf.gz sysconfig 0 0
+else
+   /usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 0
+#   /usr/sbin/upgrade /etc/rc.conf.gz factoryconfig 0 0
+
+   # set "ethwan" param required by PPA based on Default WAN mode
+   cp /etc/rc.conf.gz /tmp/rc.conf.gz
+   /bin/gunzip /tmp/rc.conf.gz
+   . /tmp/rc.conf 2> /dev/null
+   
+   eval g_wan_phy_mode='$'wanphy_phymode
+   eval g_wan_tc_mode='$'wanphy_tc
+
+   if [ "$g_wan_phy_mode" = "0" -a "$g_wan_tc_mode" = "0" ]; then # ADSL and ATM
+	/usr/sbin/upgrade ethwan_set 0
+   elif [ "$g_wan_phy_mode" = "1" ]; then # Mii-0 or Mixed mode
+	/usr/sbin/upgrade ethwan_set 1
+   elif [ "$g_wan_phy_mode" = "2" ]; then # Mii-1 
+	/usr/sbin/upgrade ethwan_set 2
+   fi
+
+fi
+sync
+sleep 5 
+reboot
+

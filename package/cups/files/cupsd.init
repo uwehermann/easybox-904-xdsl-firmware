@@ -1,0 +1,21 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006 OpenWrt.org
+START=50
+
+start() {
+	mkdir -p /var/cache/cups
+	mkdir -p /var/cups
+	mkdir -p /var/spool/cups/tmp
+	mod=$(stat -c %a /usr/lib/cups/backend/usb)
+	if [ "$mod" = "755" ]; then
+		# restore the file permission which was changed at the first boot
+		chmod 700 /usr/lib/cups/backend/usb
+		chmod 700 /usr/lib/cups/backend/ipp
+		chmod 700 /usr/lib/cups/backend/lpd
+	fi
+	/usr/sbin/cupsd
+}
+
+stop() {
+	killall cupsd
+}

@@ -1,0 +1,180 @@
+#!/bin/sh
+
+#705221:Pramod start
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+#705221:Pramod end
+
+eval search_str1='^wan_[^_].*_iface=\"'$interface'\"'
+wan_idx_str1=`grep $search_str1 /etc/rc.conf`
+wan_idx1=${wan_idx_str1#*_}
+wan_idx1=${wan_idx1%%_*}
+eval link_type='$'wan_${wan_idx1}_linkType
+
+if [ "$link_type" -ne "4" ]; then # PPPoE
+
+if [ "$1x" = "x" ]; then
+	echo "Error: should be called from udhcpc"
+else #[
+
+#[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+
+	RESOLV_CONF="/etc/resolv.conf"
+	[ -n "$broadcast" ] && BROADCAST="$broadcast"
+	[ -n "$subnet" ] && NETMASK="$subnet"
+	[ -n "$mtu" ] && MTU="$mtu"
+	if [ -n "$CONFIG_FEATURE_IFX_TR69_DEVICE" -a "$CONFIG_FEATURE_IFX_TR69_DEVICE" = "1" ]; then
+		# lan dhcp config
+		case "$1" in
+			deconfig)
+				/sbin/ifconfig $interface 0.0.0.0
+		
+				;;
+			renew)
+				echo "IP renewing..."
+				;;
+			bound)
+				if [ -n "$BROADCAST" ]; then
+					/sbin/ifconfig $interface $ip broadcast $BROADCAST netmask $NETMASK up
+				else
+					if  [ "$link_type" = "2" ]; then
+						/sbin/ifconfig $interface $ip netmask $NETMASK pointopoint $router up
+					else  
+						/sbin/ifconfig $interface $ip netmask $NETMASK up
+					fi
+				fi
+
+				# add default route with gateway from env - router
+				route add default gw $router
+
+				# read each dns server ip address from env and put in /etc/resolv.conf
+				echo -n > /etc/resolv.conf
+				for i in $dns ; do
+					echo "nameserver $i" >> /etc/resolv.conf
+				done
+				
+				;;
+		esac
+	else
+#		iftype=`echo $interface | cut -b 1-3`
+#		iftype=${interface%%[0-9]*}
+		eval search_str='^wan_[^_].*_iface=\"'$interface'\"'
+		#wan_idx=`cat /etc/rc.conf | grep $search_str | cut -d '_' -f 2`
+		wan_idx_str=`grep $search_str /etc/rc.conf`
+		wan_idx=${wan_idx_str#*_}
+		wan_idx=${wan_idx%%_*}
+
+		case "$1" in
+			deconfig)
+				/sbin/ifconfig $interface 0.0.0.0
+				. /etc/rc.d/rc.bringup_wan_services stop $wan_idx
+				#705184:Pramod start
+				if [ "$CONFIG_PACKAGE_IFX_DEVM" = "1" ]; then
+					# call event utility with interface down
+					/usr/sbin/ifx_event_util "WAN_INTERFACE" "DOWN" "wan_main" "wan_index" "$wan_idx"
+				fi
+				#705184:Pramod end
+				;;
+			renew)
+				echo "IP renewing..."
+				;;
+			leasefail)
+				echo "IP Lease Failed..."
+				# Switch on the RED Internet LED - unable to contact DHCP Server
+
+				if [ -n "`/bin/cat /tmp/adsl_status | grep "7"`" ]; then
+					if [ "$CONFIG_FEATURE_LED" = "1" ]; then
+						echo none > /sys/class/leds/internet_led/trigger
+						echo 0 > /sys/class/leds/internet_led/brightness
+					fi	
+					if [ "$CONFIG_FEATURE_LED_INTERNET_RED" = "1" ]; then
+		        	        	echo none > /sys/class/leds/internet_red_led/trigger
+		                		echo 1 > /sys/class/leds/internet_red_led/brightness
+					fi	
+				else
+					if [ "$CONFIG_FEATURE_LED" = "1" ]; then
+						echo none > /sys/class/leds/internet_led/trigger
+			                	echo 0 > /sys/class/leds/internet_led/brightness
+					fi	
+					if [ "$CONFIG_FEATURE_LED_INTERNET_RED" = "1" ]; then
+		        	        	echo none > /sys/class/leds/internet_red_led/trigger
+		                		echo 0 > /sys/class/leds/internet_red_led/brightness
+					fi	
+				fi
+				;;
+			bound)
+				# First stop all the existing services
+				. /etc/rc.d/rc.bringup_wan_services stop $wan_idx
+
+				if [ -n "$BROADCAST" ]; then
+					/sbin/ifconfig $interface $ip broadcast $BROADCAST netmask $NETMASK up
+				else 
+                                        if  [ "$link_type" = "2" ]; then
+                                                /sbin/ifconfig $interface $ip netmask $NETMASK pointopoint $router up
+					else
+						/sbin/ifconfig $interface $ip netmask $NETMASK up
+					fi
+				fi
+
+				count=1
+				for i in $router ; do
+						ROUTER="$ROUTER ROUTER$count $i"
+					count=$(( $count + 1 ))
+				done
+	
+				eval dns_override='$'wan_${wan_idx}_DNSOverride
+				if [ "$dns_override" = "1" ]; then # if DNS Override set get the DNS Servers' IP From Server
+					count=1
+					for i in $dns ; do
+					DNS_ARG="$DNS_ARG DNS$count $i"
+						count=$(( $count + 1 ))
+					done
+					/usr/sbin/status_oper SET "WAN${wan_idx}_DNS_SERVER" $DNS_ARG
+				else # if DNS Override is disabled get the DNS Servers' IP from rc.conf
+					eval file_dns='$'wan_${wan_idx}_DNSServers
+#					dns_servers=`echo $file_dns | tr -s "," " "`
+					ORG_IFS=$IFS
+					IFS=","
+					count=1
+					for i in $dns_servers ; do
+						DNS_ARG="$DNS_ARG DNS$count $i"
+						count=$(( $count + 1 ))
+					done
+					IFS="$ORG_IFS"
+					/usr/sbin/status_oper SET "WAN${wan_idx}_DNS_SERVER" $DNS_ARG
+				fi
+	
+				/usr/sbin/status_oper SET "WAN${wan_idx}_GATEWAY" $ROUTER
+	
+				#705183:Pramod start
+				if [ "$CONFIG_PACKAGE_IFX_DEVM" = "1" ]; then
+					# call event utility for interface up
+					/usr/sbin/ifx_event_util "WAN_INTERFACE" "UP" "wan_main" "wan_index" "$wan_idx"
+	
+					old_ip=`/usr/sbin/status_oper GET "Wan${wan_idx}_IF_Info" IP`
+					if [ "$old_ip" != "$ip" ]; then
+						# call event utility with the new local ipaddress and wan index
+						/usr/sbin/ifx_event_util "WAN_IPADDRESS" "MOD" "wan_main" "ipAddr" "$ip" "wan_index" "$wan_idx"
+					fi
+				fi
+				#705183:Pramod end
+	
+	
+				/etc/rc.d/rc.bringup_wan_services start $wan_idx 
+				;;
+		esac
+	fi
+fi #]
+fi
+	#exit 0

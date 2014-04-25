@@ -1,0 +1,28 @@
+print "###########################\n"
+print "#                         #\n"
+print "# Daniel Type AT command. #\n"
+print "#                         #\n"
+print "###########################\n"
+opengt
+set com 115200n81
+set senddelay 0.05
+waitquiet 1 0.2
+print "\n"
+
+:loop
+    print "Command: "
+    input $s
+    let x=len($s)
+    if x=1 goto end
+    dec x
+    let $s=$left($s,x)
+    send $s
+    send "^m"
+:loop2
+    print $o
+    get 1 "^m" $o
+    let o=len($o)
+    if o > 0 goto loop2
+    goto loop
+:end
+print "\nThanks for your use.\n"

@@ -1,0 +1,124 @@
+menu "advanced configuration (for developers)"
+   depends on PACKAGE_ifx-voice-cpe-tapi
+config  LTQ_VOICE_CPE_TAPI_ADDITIONAL_FLAGS
+	string "additional configuration arguments"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default ""
+	help
+		additional configuration arguments (for developers)
+endmenu
+
+config LTQ_VOICE_CPE_TAPI_FAX
+	bool "fax relay and modem support"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default n
+	help
+		Option to enable fax/modem support in TAPI.
+		Note: Newer platforms as AR9 and VR9 support a T.38 fax relay stack
+		in FW while older platforms like Danube or VINETIC-CPE require a
+		separate SW stack executed as an application.
+
+config LTQ_VOICE_CPE_TAPI_CID
+	bool "CID support"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default y
+	help
+		Option to enable Caller ID support.
+
+config LTQ_VOICE_CPE_TAPI_LT_GR909
+	bool "Linetesting GR-909 support"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default y
+	   help
+		   Option to enable linetesting GR-909.
+
+config LTQ_VOICE_CPE_TAPI_DECT
+	bool "DECT encoding for COSIC modem"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default n
+		help
+			Option to enable DECT encoding for COSIC modem.
+
+config LTQ_VOICE_CPE_TAPI_KPI
+	bool "KPI (Kernel Packet Interface)"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default y
+	help
+		Option to enable the generic kernel level packet interface
+		which allows accelerated packet transfer for various purposes.
+		The most important example is the QOS option, which allows
+		to redirect RTP packets directly into the IP stack.
+		Other options relying on KPI are DECT and HDLC.
+
+config LTQ_VOICE_CPE_TAPI_QOS
+	bool "QOS for accelerated RTP packet handling"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default y
+	help
+		Option to enable an accelerated RTP packet transfer inside
+		the LINUX kernel space. This option requires the KPI2UDP
+		packet, which actually provides the OS specific hooks in
+		the IP stack.
+
+config LTQ_VOICE_CPE_TAPI_STATISTICS
+	bool "TAPI statistics via /proc fs"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default y
+	help
+		Option to enable /proc fs statistics for packet counts etc.
+
+config LTQ_VOICE_CPE_TAPI_METERING
+	bool "Metering (TTX) support"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default n
+	help
+		Option to enable metering (TTX) support.
+
+config LTQ_VOICE_CPE_TAPI_HDLC
+	bool "PCM HDLC support, evaluation"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default n
+	help
+		Option to enable PCM HDLC framing inside the firmware, e.g. for
+		ISDN D-Channel access.
+
+config LTQ_VOICE_CPE_TAPI_TRACES
+	bool "enable driver traces"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default y
+	help
+		enable driver traces with different trace levels to be
+		configured dynamically from the application or during insmod
+
+config LTQ_VOICE_CPE_TAPI_PHONE_DETECTION
+	bool "FXS Phone Detection"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default n
+		help
+			Option to use plugged Phone Detection on FXS line.
+
+config LTQ_VOICE_CPE_TAPI_CONT_MEASUREMENT
+	bool "Continuous Analog Line Measurement"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	default n
+		help
+			Option to use Continuous Measurement on FXS line.
+
+config LTQ_VOICE_CPE_TAPI_PMC
+	bool "Power Management Control support"
+	depends on PACKAGE_ifx-voice-cpe-tapi
+	depends on (LTQ_VOICE_CPE_TAPI_PHONE_DETECTION)
+	depends on (TARGET_ltqcpe_platform_ar9 || TARGET_ltqcpe_platform_vr9)
+	default n
+		help
+			Register with the Power Management Control Unit (PMCU)
+			and enable/disable the power features.
+
+config LTQ_VOICE_CPE_TAPI_EVENT_LOGGER
+	bool "Event logger support"
+	depends on PACKAGE_ifx-voice-cpe-tapi && +PACKAGE_ifx-evtlog
+	default n
+		help
+			Option to enable detailed traces
+			- for debugging only
+			- requires package ifx-evtlog.

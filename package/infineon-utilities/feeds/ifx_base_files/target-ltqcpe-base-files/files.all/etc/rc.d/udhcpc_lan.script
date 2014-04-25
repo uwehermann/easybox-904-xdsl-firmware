@@ -1,0 +1,74 @@
+#!/bin/sh
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+if [ "$1x" = "x" ]; then
+	echo "Error: should be called from udhcpc"
+else #[
+
+
+	RESOLV_CONF="/etc/resolv.conf"
+	[ -n "$broadcast" ] && BROADCAST="$broadcast"
+	[ -n "$subnet" ] && NETMASK="$subnet"
+	[ -n "$mtu" ] && MTU="$mtu"
+
+	eval search_str="_interface=\\\"$interface\\\""
+#	lan_idx=`cat /etc/rc.conf | grep $search_str | cut -d '_' -f 3`
+	lan_idx=`grep $search_str /etc/rc.conf`
+	lan_idx=${lan_idx%_*}
+	lan_idx=${lan_idx##*_}
+	if [ -n "$CONFIG_TARGET_LTQCPE_PLATFORM_AR9_VB" ]; then
+		lan_idx=0
+	fi
+
+		# lan dhcp config
+		case "$1" in
+			deconfig)
+				/sbin/ifconfig $interface 0.0.0.0
+				/usr/sbin/status_oper SET "Lan${lan_idx}_IF_Info" STATUS DISCONNECTED
+				/usr/sbin/status_oper SET "Lan${lan_idx}_GATEWAY" ROUTER1 "0.0.0.0"
+				/usr/sbin/status_oper SET "Lan${lan_idx}_DNS_SERVER" DNS1 "0.0.0.0"
+				/usr/sbin/status_oper SET "Lan${lan_idx}_DOMAIN" DOMAIN ""
+				;;
+			renew)
+				echo "IP renewing..."
+				;;
+			bound)
+				if [ -n "$BROADCAST" ]; then
+					/sbin/ifconfig $interface $ip broadcast $BROADCAST netmask $NETMASK up
+				else
+					/sbin/ifconfig $interface $ip netmask $NETMASK up
+				fi
+
+				/usr/sbin/status_oper SET "Lan${lan_idx}_IF_Info" STATUS CONNECTED IP "$ip" MASK "$NETMASK"
+
+				# add default route with gateway from env - router
+				count=1
+				for i in $router ; do
+					ROUTER="$ROUTER ROUTER$count $i"
+					count=$(( $count + 1 ))
+				done
+
+				route add default gw $router
+				/usr/sbin/status_oper SET "Lan${lan_idx}_GATEWAY" $ROUTER
+
+				# read each dns server ip address from env and put in /etc/resolv.conf
+				echo -n > /etc/resolv.conf
+				count=1
+				for i in $dns ; do
+					echo "nameserver $i" >> /etc/resolv.conf
+					DNS_ARG="$DNS_ARG DNS$count $i"
+				done
+				/usr/sbin/status_oper SET "Lan${lan_idx}_DNS_SERVER" $DNS_ARG
+
+				/usr/sbin/status_oper SET "Lan${lan_idx}_DOMAIN" DOMAIN $domain
+				
+				;;
+		esac
+fi #]
+	#exit 0

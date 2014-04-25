@@ -1,0 +1,81 @@
+#
+# Copyright (C) 2010-2011 OpenWrt.org
+#
+# This Makefile and the code shipped in src/ is free software, licensed
+# under the GNU Lesser General Public License, version 2.1 and later.
+# See src/COPYING for more information.
+#
+# Refer to src/COPYRIGHT for copyright statements on the source files.
+#
+
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=libiconv
+PKG_RELEASE:=5
+
+include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/host-build.mk
+
+define Package/libiconv
+  SECTION:=libs
+  CATEGORY:=Libraries
+  TITLE:=Tiny drop-in replacement for the GNU Character set conversion library
+endef
+
+define Build/Prepare
+	$(INSTALL_DIR) $(PKG_BUILD_DIR)
+	$(CP) ./src/* $(PKG_BUILD_DIR)/
+endef      
+
+define Build/Configure
+endef
+
+define Build/Compile
+	$(MAKE) -C $(PKG_BUILD_DIR) \
+		CC="$(TARGET_CC)" \
+		CFLAGS="$(TARGET_CFLAGS) -Wall" \
+		LDFLAGS="$(TARGET_LDFLAGS)"
+#	$(TARGET_CC) -Wall -fPIC -c $(PKG_BUILD_DIR)/iconv.c -o $(PKG_BUILD_DIR)/iconv.o -I$(PKG_BUILD_DIR)/include
+#	$(TARGET_CC) -shared -Wl,-soname,libiconv.so.1 -o $(PKG_BUILD_DIR)/libiconv.so.1.0 $(PKG_BUILD_DIR)/iconv.o
+#	ln -sf libiconv.so.1.0	libiconv.so.1
+#	ln -sf libiconv.so.1	libiconv.so	
+endef
+
+define Build/InstallDev
+	$(INSTALL_DIR) $(1)/usr/lib
+	$(CP) $(PKG_BUILD_DIR)/libiconv.so* $(1)/usr/lib
+	$(INSTALL_DIR) $(1)/usr/include
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/include/iconv.h $(1)/usr/include
+endef
+
+define Package/libiconv/install
+	$(INSTALL_DIR)	$(1)/usr/lib
+	$(CP)	$(PKG_BUILD_DIR)/libiconv.so*	$(1)/usr/lib/
+endef
+
+define Host/Prepare
+	mkdir -p $(HOST_BUILD_DIR)
+endef
+
+define Host/Configure
+
+endef
+
+define Host/Compile
+	$(HOSTCC) -c src/iconv.c -o $(HOST_BUILD_DIR)/iconv.o -Isrc/include -fPIC
+	ar rcs $(HOST_BUILD_DIR)/libiconv.a $(HOST_BUILD_DIR)/iconv.o
+endef
+
+define Host/Install
+	$(INSTALL_DIR) $(STAGING_DIR_HOST)/lib
+	$(INSTALL_DATA) $(HOST_BUILD_DIR)/libiconv.a $(STAGING_DIR_HOST)/lib/
+
+	$(INSTALL_DIR) $(STAGING_DIR_HOST)/include
+	$(INSTALL_DATA) ./src/include/iconv.h $(STAGING_DIR_HOST)/include/
+
+	$(INSTALL_DIR) $(STAGING_DIR_HOST)/share/aclocal
+	$(INSTALL_DATA) ./src/m4/* $(STAGING_DIR_HOST)/share/aclocal/
+endef
+
+$(eval $(call HostBuild))
+$(eval $(call BuildPackage,libiconv))

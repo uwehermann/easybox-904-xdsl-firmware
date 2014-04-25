@@ -1,0 +1,45 @@
+#!/bin/sh
+
+gw=$5
+dev=$1
+cfg=$6
+
+#unit=${dev:3:3}
+#if [ ${#unit} -eq 1 ] ; then
+#	echo -n
+#elif [ ${#unit} -eq 2 ] ; then
+#	unit=$(( 1${unit} - 100 ))
+#elif [ ${#unit} -eq 3 ] ; then
+#	unit=$(( 1${unit} - 1000 ))
+#else
+#	echo"[ipv6-up] WRONG dev name $dev"
+#	return
+#fi
+#arc_config_section="wan$unit"
+
+#echo "[ipv6-up] /usr/sbin/arc-ipv6-linkup.sh $cfg $dev $gw"
+#. /usr/sbin/arc-ipv6-linkup.sh $cfg $dev $gw
+
+########################## yuelin
+glb_ip6_enable=`ccfg_cli get ip6_enable@system`
+ip6_enable=`ccfg_cli get ip6_enable@${cfg}`
+###############################
+
+ip6_proto=`umngcli get ip6_proto@$cfg`
+echo "[ipv6-up] $ip6_proto" >> /tmp/ipv6.log
+echo "[ipv6-up] $dev $gw $cfg $ip6_proto" >> /tmp/ipv6.log
+
+########################## yuelin
+if [ "$glb_ip6_enable" == "1" ]; then
+	echo 0 > /proc/sys/net/ipv6/conf/default/disable_ipv6
+	if [ "$ip6_enable" == "1" ]; then
+		/usr/sbin/arc_ipv6cp_up &
+		echo "[ipv6-up] done" >> /tmp/ipv6.log
+	else
+		echo 0 > /proc/sys/net/ipv6/conf/$cfg/disable_ipv6
+		echo "[ipv6-up]wan ipv6 does not enable." >> /tmp/ipv6.log
+	fi
+else
+	echo "[ipv6-up]system ipv6 does not enable." >> /tmp/ipv6.log
+fi
+###############################

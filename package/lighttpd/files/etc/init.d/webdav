@@ -1,0 +1,17 @@
+#!/bin/sh
+
+case "$1" in
+	start)
+		/usr/sbin/webdav_start webdav_default_folder_set 1 &
+		;;
+	stop)
+		/usr/sbin/webdav_stop &
+		;;
+	restart)
+		(/usr/sbin/webdav_stop ; sleep 3 ; /usr/sbin/webdav_start webdav_default_folder_set 1) &
+		;;
+	*)
+		echo $"Usage $0 {start|stop|restart}"
+		;;
+esac
+

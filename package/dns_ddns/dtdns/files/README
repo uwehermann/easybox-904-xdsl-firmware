@@ -1,0 +1,36 @@
+dtdnsupdate - dtdns.com updater  
+Copyright (c) 2002 Christopher Trahan   Chris@xoden.com
+
+This is an DTDNS.com updater for Linux. 
+you can use it in crontab without the Verbose mode.
+
+dtdnsupdate is GPL'd software.  See the file, 'LICENSE', for details.
+
+Installation:
+
+Type ./configure at a bash prompt or shell command
+
+Use:
+
+dtdnsupdate supports a few command line parameters:
+
+** means required
+-u or --username     sets the hostname to update (ie - theedge.dtdns.net) **
+-p or --password     sets the password to use **
+-i or --ip           optional, sets a specific ip address to update with 
+-v or --verbose      optional, verbose operation
+-h or --help         displays brief help
+
+Examples of use:
+
+dtdnsupdate -u test -p mypass -i 255.255.255.255 -v
+
+dtdnsupdate --username test --password mypass
+
+
+Version history:
+
+0.1.0
+-----
+
+ * first version

@@ -1,0 +1,36 @@
+#!/bin/sh
+[ -f /etc/banner ] && cat /etc/banner
+
+### ctc ###
+if [ `/bin/grep -cw CONFIG_BASE_FILES_CO_NOR_NAND /etc/config.sh` -ge 1 ] ; then
+#	export PATH=/bin:/tmp/sbin:/sbin:/usr/bin:/usr/sbin
+	export PATH=/tmp/bin:/tmp/sbin:/tmp/usr/bin:/tmp/usr/sbin:/bin:/sbin:/usr/bin:/usr/sbin
+else
+#	export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+	export PATH=/tmp/bin:/tmp/sbin:/tmp/usr/bin:/tmp/usr/sbin:/bin:/sbin:/usr/bin:/usr/sbin
+fi
+export LD_LIBRARY_PATH=/tmp/lib:/tmp/usr/lib
+###########
+
+export HOME=$(grep -e "^${USER:-root}:" /etc/passwd | cut -d ":" -f 6)
+export HOME=${HOME:-/root}
+export PS1='\u@\h:\w\$ '
+
+### ctc ###
+if [ -d /opt/lantiq/bin ] ; then
+#	export PATH=$PATH:/opt/lantiq/bin
+	export PATH=$PATH:/tmp/opt/lantiq/bin:/opt/lantiq/bin
+fi
+###########
+
+[ -x /bin/more ] || alias more=less
+[ -x /usr/bin/vim ] && alias vi=vim || alias vim=vi
+
+[ -z "$KSH_VERSION" -o \! -s /etc/mkshrc ] || . /etc/mkshrc
+
+[ -x /sbin/arp ] || arp() { cat /proc/net/arp; }
+[ -z /bin/ldd ] || ldd() { LD_TRACE_LOADED_OBJECTS=1 $*; }
+
+# For Dumpping core file
+ulimit -c unlimited
+

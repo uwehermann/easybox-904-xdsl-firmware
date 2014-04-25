@@ -1,0 +1,27 @@
+#!/bin/sh
+# Copyright (C) 2008 OpenWrt.org
+
+START=97
+
+start()
+{
+	if [ -c /dev/wdt ] ; then
+		wdt -t 60 &
+	fi
+}
+
+stop()
+{
+	pkill -9 wdt
+}
+
+case "$1" in
+	"boot")		start	;;
+	"start")	start	;;
+	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start watchdog function'
+				echo $0 'start - start watchdog function'
+				echo $0 'stop  - stop watchdog function'
+				;;
+esac

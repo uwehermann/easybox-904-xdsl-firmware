@@ -1,0 +1,175 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006 OpenWrt.org
+#START=88
+
+SSD=start-stop-daemon
+PIDF=/var/run/pure-ftpd.pid
+PROG=/usr/sbin/pure-ftpd
+CFGDIR=/tmp/pure-ftpd
+CFGDFTDIR=/etc/pure-ftpd
+CFGSYSDIR=/etc/config
+CFG=$CFGDIR/pure-ftpd
+PWD=$CFGDIR/pure-ftpd.pwd
+PDB=$CFGDIR/pure-ftpd.pdb
+PEM=$CFGDIR/pure-ftpd.pem
+DFTSHAREDIR=/tmp/usb
+
+ROOT_ACCOUNT=root
+GUEST_ACCOUNT=anonymous
+
+export PURE_PASSWDFILE=$PWD
+export PURE_DBFILE=$PDB
+
+append_bool() {
+	local section="$1"
+	local option="$2"
+	local value="$3"
+	local _val
+	config_get_bool _val "$section" "$option" '0'
+	[ "$_val" -gt 0 ] && append args "$3"
+}
+
+append_string() {
+	local section="$1"
+	local option="$2"
+	local value="$3"
+	local _val
+	config_get _val "$section" "$option"
+	[ -n "$_val" ] && append args "$3 $_val"
+}
+
+start_service() {
+	local section="$1"
+	args=""
+
+	#echo "[pure-ftpd start_service] section=${section}"
+	append_string "$section" port "-S"
+	append_bool "$section" noanonymous "-E"
+	append_bool "$section" anonymouscancreatedirs "-M"
+	append_bool "$section" anonymouscantupload "-i"
+	append_bool "$section" chrooteveryone "-A"
+	append_string "$section" maxclientsperip "-c"
+	append_string "$section" maxclientsnumber "-C"
+	append_string "$section" peruserlimits "-y"
+	append_string "$section" umask "-U"
+	append_string "$section" authentication "-l"
+	append_string "$section" passiveportrange "-p"
+	append_string "$section" tls "-Y"
+	append_string "$section" maxidletime "-I"
+	config_get_bool "enabled" "$section" "enabled" '1'
+	gen_pwd
+	#echo "[pure-ftpd start_service] args=${args}"
+	[ "$enabled" -gt 0 ] && $SSD -S -p $PIDF -q -x $PROG -- -g $PIDF -B $args
+}
+
+stop_service()
+{
+	pkill pure-ftpd
+}
+
+start() {
+	#echo "[pure-ftpd start] ln -s $CFG $CFGSYSDIR/pure-ftpd"
+	ln -s $CFG $CFGSYSDIR/pure-ftpd
+	config_load "pure-ftpd"
+	config_foreach start_service "pure-ftpd"
+	rm $CFGSYSDIR/pure-ftpd
+}
+
+stop() {
+#	ln -s $CFG $CFGSYSDIR/pure-ftpd
+#	config_load "pure-ftpd"
+#	config_foreach stop_service "pure-ftpd"
+#	rm $CFGSYSDIR/pure-ftpd
+	stop_service
+}
+
+gen_pem() {
+	if [ -z $1 ] ; then
+		openssl req -x509 -nodes -newkey rsa:1024 -key $PEM -out $PEM
+	else
+		openssl req -x509 -nodes -newkey rsa:1024 -key $1 -out $1
+	fi
+}
+
+add_ftp_user() { # $1-userName, $2-permission (0-read-only, 1-read-write), $3-home_dir, $4-pwd
+	local	UID
+	local	HOMEDIR
+	local	PWD
+
+	if [ -z $1 ] ; then
+		return
+	fi
+
+	#echo "[pure-ftpd add_ftp_user] \$1=${1}, \$2=${2}, \$3=${3}, \$4=${4}"
+	del_ftp_user $1
+
+	if [ -z $2 ] || [ "$2" == "0" ] ; then
+		UID=$GUEST_ACCOUNT
+	else
+		UID=$ROOT_ACCOUNT
+	fi
+
+	if [ -z $3 ] ; then
+		HOMEDIR="$DFTSHAREDIR"
+	else
+		HOMEDIR=$3
+	fi
+
+	if [ -z $4 ] ; then
+		PWD=""
+	else
+		PWD=$4
+	fi
+
+	(echo $PWD ; echo $PWD ) | pure-pw useradd $1 -u $UID -d $HOMEDIR -m 2>&1 > /dev/null
+}
+
+del_ftp_user() {
+	if [ -z $1 ] ; then
+		return
+	fi
+
+	#echo "[pure-ftpd del_ftp_user] \$1=${1}"
+	pure-pw userdel $1 2>&-
+}
+
+del_all_ftp_user() {
+	rm -f $PWD $PDB
+}
+
+gen_pwd() {
+	#echo "[pure-ftpd gen_pwd] GUEST_ACCOUNT=${GUEST_ACCOUNT}, ROOT_ACCOUNT=${ROOT_ACCOUNT}, DFTSHAREDIR=${DFTSHAREDIR}"
+	#echo "#######################" > /dev/console
+	# generate default user $ROOT_ACCOUNT:`umngcli get password@system` and $GUEST_ACCOUNT:
+		#
+	deluser $GUEST_ACCOUNT 2>&-
+	adduser -h "$DFTSHAREDIR" -D -H $GUEST_ACCOUNT
+		#
+	#[Fix] Comment second line below : Prevent from anonymous account login after disabling anonymous in GUI
+	#add_ftp_user $ROOT_ACCOUNT  1 "$DFTSHAREDIR" `umngcli get password@system`
+	#add_ftp_user $GUEST_ACCOUNT 0 "$DFTSHAREDIR"
+
+	# copy default private key and CA
+	if [ -e $CFGDFTDIR/pure-ftpd.pem.dft ] ; then
+		#cp -fp $CFGDFTDIR/pure-ftpd.pem.dft $PEM
+		cp -fp /etc/config/cert/Ftps/pure-ftpd.pem $PEM
+		#echo "[pure-ftpd gen_pwd] copy /etc/config/cert/Ftps/pure-ftpd.pem to ${PEM}"
+	else
+		gen_pem
+	fi
+}
+
+boot() {
+	# firewall may need to be stopped
+
+	# copy default config
+	#echo "[pure-ftpd boot] CFG=${CFG}, CFGDIR=${CFGDIR}"
+	mkdir $CFGDIR 2>&-
+	cp -fp $CFGDFTDIR/pure-ftpd.dft $CFG
+	#echo "[pure-ftpd boot] copy $CFGDFTDIR/pure-ftpd.dft to ${CFG}"
+	gen_pwd
+
+	addgroup -g 1005 readonly
+
+	#start
+}

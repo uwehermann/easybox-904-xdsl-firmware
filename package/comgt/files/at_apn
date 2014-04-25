@@ -1,0 +1,10 @@
+opengt
+set com 9600n81
+set senddelay 0.05
+print "\n"
+
+let $x="at+cgdcont=1,\"IP\",\"APN\"^m"
+send $x
+get 1 "" $s
+print $s
+

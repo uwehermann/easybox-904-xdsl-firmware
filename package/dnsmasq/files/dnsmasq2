@@ -1,0 +1,170 @@
+#!/bin/sh
+# Copyright (C) 2007 OpenWrt.org
+
+START=60
+
+MAX_STATIC_DNS_PER_IF=4
+
+
+#
+# $1: option type
+# $2: option value
+#
+dhcp_option()
+{
+	if [ -z "$1" ] ; then
+		return 1
+	fi
+
+	if [ -n "$2" ] ; then
+		umngcli set dhcp_option_${1}@lan0="${2}"
+	else
+		umngcli unset dhcp_option_${1}@lan0
+	fi
+
+	return 0
+}
+
+#
+# $1: IP address
+# $2: submask
+#
+lan2_ip()
+{
+	if [ -z "$2" ] ; then
+		umngcli set alias_ip4addr@lan0=0.0.0.0
+		umngcli set alias_ip4mask@lan0=0.0.0.0
+	else
+		umngcli set alias_ip4addr@lan0=${1}
+		umngcli set alias_ip4mask@lan0=${2}
+	fi
+
+	return 0
+}
+
+#
+# $1: start IP address of LAN DHCP pool
+# $2: end IP address of LAN DHCP pool
+# $3: lease time of LAN DHCP pool. If it is empty, reset to dhcp4lease@lan0
+#
+lan2_pool()
+{
+	if [ -z "$2" ] ; then
+		umngcli set alias_dhcp4pool_s@lan0=0.0.0.0
+		umngcli set alias_dhcp4pool_e@lan0=0.0.0.0
+	else
+		umngcli set alias_dhcp4pool_s@lan0=${1}
+		umngcli set alias_dhcp4pool_e@lan0=${2}
+	fi
+
+	if [ -z "$3" ] ; then
+		umngcli set alias_dhcp4lease@lan0=`umngcli get dhcp4lease@lan0`
+	else
+		umngcli set alias_dhcp4lease@lan0=${3}
+	fi
+
+	return 0
+}
+
+#
+# $1: <wanif>
+# $2: <id>, 1-$MAX_STATIC_DNS_PER_IF
+# $3: <svr-ip>
+#
+add_svr()
+{
+	if [ -z "$3" ] ; then
+		return 1
+	fi
+
+	if [ "$2" -lt 1 ] || [ "$2" -gt "$MAX_STATIC_DNS_PER_IF" ] ; then
+		return 1
+	fi
+
+	if [ -z "`umngcli get ifname@${1}`" ] ; then
+		return 1
+	fi
+
+	umngcli set dns_svr_${2}@${1}="$3"
+
+	return 0
+}
+
+#
+# $1: <wanif>
+# $2: <id>, 1-$MAX_STATIC_DNS_PER_IF
+#
+del_svr()
+{
+	if [ -z "$2" ] ; then
+		return 1
+	fi
+
+	if [ "$2" -lt 1 ] || [ "$2" -gt "$MAX_STATIC_DNS_PER_IF" ] ; then
+		return 1
+	fi
+
+	if [ -z "`umngcli get ifname@${1}`" ] ; then
+		return 1
+	fi
+
+	umngcli unset dns_svr_${2}@${1}
+
+	return 0
+}
+
+#
+# $1: <wanif>
+#
+list_svr()
+{
+	if [ -z "$1" ] ; then
+		return 1
+	fi
+
+	if [ -z "`umngcli get ifname@${1}`" ] ; then
+		return 1
+	fi
+
+	CNT=1
+	while [ "$CNT" -le "$MAX_STATIC_DNS_PER_IF" ] ; do
+		SVR=`umngcli get dns_svr_${CNT}@${1}`
+		echo "${1}:dns_svr_${CNT}=$SVR"
+		let CNT=$CNT+1
+	done
+
+	return 0
+}
+
+case "$1" in
+	"boot")			/etc/init.d/dnsmasq start &	;;
+	"start")		/etc/init.d/dnsmasq start &	;;
+	"stop")			/etc/init.d/dnsmasq stop &	;;
+	"stop_process")	(. /etc/init.d/dnsmasq ; stop_process) &	;;
+	"restart")		(. /etc/init.d/dnsmasq ; stop_process ; /etc/init.d/dnsmasq start) &;;
+	"option")		dhcp_option "$2" "$3"		;;
+	"sync")			(umngcli commitcfg ; umngcli synccfg lan0) &;;
+	"lan2ip")		lan2_ip "$2" "$3"			;;
+	"lan2pool")		lan2_pool "$2" "$3" "$4"	;;
+	"add-svr")		add_svr $2 $3 $4			;;
+	"del-svr")		del_svr $2 $3				;;
+	"list-svr")		list_svr $2					;;
+	"sync-svr")		(umngcli commitcfg ; resolv_update.sh $2 SYNC) &;;
+	*)
+			echo $0 'boot          - setup and start DNS/DHCP service'
+			echo $0 'start         - start DNS/DHCP service'
+			echo $0 'stop          - stop DNS/DHCP service'
+			echo $0 'stop_process  - stop DNS/DHCP process'
+			echo $0 'restart       - restart DNS/DHCP service'
+			echo $0 'sync          - synchronize DHCP service'
+			echo $0 'option <type> [value]         - set / unset DHCP option <opt> value'
+			echo $0 'lan2ip <ipaddr> <netmask>     - set LAN2 IP address and subnet mask'
+			echo $0 'lan2pool <ip_start> <ip_end>  - set LAN2 DHCP pool range'
+			echo $0 'add-svr <wanif> <id> <svr_ip> - add a static DNS server ip address bound to interface wanNNN'
+			echo $0 'del-svr <wanif> <id>          - delete a static DNS server ip address bound to interface wanNNN'
+			echo $0 '                                <id>: 1 -' $MAX_STATIC_DNS_PER_IF
+			echo $0 'list-svr <wanif>              - list all static DNS server ip addresses bound to interface wanNNN'
+			echo $0 'sync-svr <wanif>              - sync static DNS server configuration bound to interface wanNNN'
+			;;
+esac
+

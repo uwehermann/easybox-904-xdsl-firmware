@@ -1,0 +1,67 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+#Enable only for debug
+#MPSTATLOG="/tmp/mpstat_log.txt"
+#mpstat 2 100 > $MPSTATLOG &
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+uc_rcconf() {
+	#/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	cp /etc/rc.conf.gz /ramdisk/flash/rc.conf.gz
+	/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+	#if [ $? -ne 0 ]; then
+	#	echo "FLASH config file missing/corrupted!"
+	#	/bin/rm -f /ramdisk/flash/rc.conf
+	#	/usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 1
+	#	/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	#	/bin/gunzip /ramdisk/flash/rc.conf.gz
+	#fi
+}
+set_passwd() {
+	touch /ramdisk/flash/passwd
+	[ -f /etc/rc.conf ]&& . /etc/rc.conf 2> /dev/null
+	i=0
+	while [ $i -lt $passFileLineCount ]
+	do
+	        eval passVar='$passFileLineCount'$i
+	        echo $passVar >> /ramdisk/flash/passwd
+	        i=`expr $i + 1`
+	done
+}
+
+uptime() {
+	cat /proc/uptime | cut -d" " -f1
+}
+
+#Enable only for debug
+#LOGFILE="/tmp/bootup_log.txt"
+run_scripts() {
+	#echo "Script Name	Start Time	End Time" > $LOGFILE
+	for i in /etc/rc.d/$1*; do
+		if [ -x $i ] ;then 
+			#echo -ne "$i\t $(uptime)\t"  >> $LOGFILE
+			$i $2 2>&1
+			#echo -ne "$(uptime)\n"  >> $LOGFILE
+		fi
+	done
+}
+
+#LOGGER="cat"
+#[ -x /usr/bin/logger ] && LOGGER="logger -s -p 6 -t sysinit"
+
+#uc_rcconf
+#set_passwd
+
+if [ "$1" = "S" ]; then
+         [ `grep -q shell /proc/cmdline;echo $?` -eq 0 ] && {             #login to shell without any start_up script
+                         /etc/rc.d/S02boot start;
+                         /etc/rc.d/S03passwd.sh start;
+                } ||    run_scripts "$1" "$2" &
+else
+        run_scripts "$1" "$2"
+fi
+

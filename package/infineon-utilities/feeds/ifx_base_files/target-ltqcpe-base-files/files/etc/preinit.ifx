@@ -1,0 +1,7 @@
+#!/bin/sh
+
+mkdir /tmp/ramdisk
+
+cp -ar /ramdisk_copy/* /ramdisk
+
+/usr/sbin/setup_netdev.sh port-disable

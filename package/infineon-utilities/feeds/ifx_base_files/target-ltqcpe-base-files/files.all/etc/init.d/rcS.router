@@ -1,0 +1,411 @@
+#!/bin/sh
+/bin/mount -a
+
+# create ramdisk for write
+
+# copy system setting from flash to ram
+mount -t ramfs -o nr_inodes=1k,mode=770 /dev/ram /ramdisk
+cp -ar /ramdisk_copy/* /ramdisk
+/bin/mount -t ramfs /dev/ram /dev
+mv /ramdisk/dev/* /dev
+
+/usr/sbin/mknod_util amazon_se-port /dev/amazon_se-port 
+
+/usr/sbin/swreset &
+
+
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+
+
+if [ "$CONFIG_FEATURE_IFX_LOW_FOOTPRINT" = "1" ]; then
+
+#    echo 2 > /proc/sys/vm/vm_cache_scan_ratio
+#    echo 2 > /proc/sys/vm/vm_vfs_scan_ratio
+#    echo 20 > /proc/sys/vm/vm_mapped_ratio
+#    echo 1 > /proc/sys/vm/vm_anon_lru	
+# Optimize Routing & Conntrack cache
+    echo 4096 > /proc/sys/net/ipv4/route/max_size
+    echo 512 > /proc/sys/net/ipv4/ip_conntrack_max
+fi
+
+#if [ "$CONFIG_FEATURE_IFX_LOW_FOOTPRINT" = "1" ]; then
+#echo 1 > /proc/sys/vm/overcommit_memory
+#fi
+
+if [ "$CONFIG_FEATURE_CONFIG_FEATURE_CONFIG_FEATURE_CONFIG_FEATURE_IFX_ADSL_FIRMWARE_IN_ROOTFS" != "1" ]; then
+	if [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "sqlz" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount /firmware
+	elif [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "sqsh" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount /firmware
+	else
+		echo "ADSL Firmware Not Found"
+	fi
+fi
+
+/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+
+	/usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 0
+	/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+#For SSL certificate
+if [ "`grep "@@@@@CERTSTART@@@@@" /flash/rc.conf`" ]; then
+if [ "`grep "BEGIN CERTIFICATE" /flash/rc.conf`" ]; then 
+	sed -n -e '/@@@@@CERTSTART@@@@@/,$p' /flash/rc.conf > /tmp/lower.txt
+	sed -n -e '1,/@@@@@CERTSTART@@@@@/p' /flash/rc.conf > /tmp/sed_upper.txt
+	sed '/@@@@@CERTSTART@@@@@/d' /tmp/sed_upper.txt > /tmp/upper.txt
+	sed '/@@@@@CERTSTART@@@@@/d' /tmp/lower.txt > /tmp/lower1.txt
+	mv /tmp/lower1.txt /flash/Cert.pem
+	mv /tmp/upper.txt /flash/rc.conf
+	rm -rf /tmp/sed_upper.txt /tmp/lower.txt
+else
+	 sed '/@@@@@CERTSTART@@@@@/d' /flash/rc.conf > /tmp/rc.conf.tmp
+	 mv /tmp/rc.conf.tmp /flash/rc.conf
+fi
+fi
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+
+# Read Configuration File
+if [ -r /etc/rc.conf ]; then
+         . /etc/rc.conf 2> /dev/null
+fi
+
+#806091:<IFTW-leon> IOP bit
+#/usr/sbin/read_img fwdiag /ramdisk/flash/cmv_batch
+#if [ $? -ne 0 ]; then
+#        echo "cmv_batch config file missing/corrupted!"
+#        /usr/sbin/upgrade /etc/cmv_batch fwdiag 0 0
+#        /usr/sbin/read_img fwdiag /ramdisk/flash/cmv_batch
+#fi
+
+
+#806051:<IFTW-Leon>:move mknod here to avoid device open error
+# led device
+/bin/mknod /dev/led c 10 151
+
+
+#/usr/sbin/mknod_util dsl_cpe_api /dev/dsl_cpe_api
+/usr/sbin/mknod_util drv_dsl_cpe_os_linux /dev/dsl_cpe_api
+/usr/sbin/mknod_util ifx_mei /dev/ifx_mei
+echo "0" > /tmp/adsl_status
+
+# load ADSL firmware
+if [ -r /firmware/modemhwe.bin ]; then
+   /etc/rc.d/rc.bringup_adsl_start
+else
+	echo "Not able to locate ADSL FW image in MTD partition, try to use the FW image from rootfs instead!!"
+	/usr/sbin/dsl_cpe_control -i -f /root/modemhwe.bin &
+fi
+
+### Move this to Services Start
+#/usr/sbin/check_dsl &
+
+# Create the passwd file
+touch /ramdisk/flash/passwd
+i=0
+while [ $i -lt $passFileLineCount ]
+do
+	eval passVar='$passFileLineCount'$i
+	echo $passVar >> /ramdisk/flash/passwd
+	i=`expr $i + 1`
+done
+
+insmod ifx_nfext_core
+insmod ifx_nfext_ppp
+
+#/etc/snmp/snmpd.conf
+if [ "$CONFIG_FEATURE_SNMPv1" = "1" ]; then
+	CONFIG_FEATURE_IFX_SNMP_AGENT="1"
+elif [ "$CONFIG_FEATURE_SNMPv3" = "1" ]; then
+	CONFIG_FEATURE_IFX_SNMP_AGENT="1"
+elif [ "$CONFIG_FEATURE_IFX_DSL_MANAGEMENT" = "1" ]; then
+	CONFIG_FEATURE_IFX_SNMP_AGENT="1"
+fi
+
+if [ "$CONFIG_FEATURE_IFX_SNMP_AGENT" = "1" ]; then
+	echo "######  V1 Configuration  ######" > /etc/snmp/snmpd.conf
+	echo "rocommunity	$SNMProcommunity" >> /etc/snmp/snmpd.conf
+	echo "rwcommunity	$SNMPrwcommunity" >> /etc/snmp/snmpd.conf
+	if [ "$SNMPTrapEnable" = "1" ]; then
+		echo "trapsink	$SNMPTrapIP  $SNMPTrapCommunity  $SNMPTrapPort" >> /etc/snmp/snmpd.conf
+		echo "trapcommunity $SNMPTrapCommunity " >> /etc/snmp/snmpd.conf
+		echo "authtrapenable	1" >> /etc/snmp/snmpd.conf
+	else
+		echo "#trapsink	$SNMPTrapIP  $SNMPTrapCommunity  $SNMPTrapPort" >> /etc/snmp/snmpd.conf
+	fi
+	echo "######  V3 Configuration  ######" >> /etc/snmp/snmpd.conf
+fi
+
+if [ "$CONFIG_FEATURE_VLAN" = "1" ]; then
+	/bin/mknod /dev/vlan c 69 0
+fi
+
+if [ "$CONFIG_FEATURE_CONFIG_FEATURE_IFX_ADM6996_UTILITY" = "1" ]; then
+	/bin/mknod /dev/adm6996 c 69 0
+	/sbin/insmod admmod
+fi
+
+#Setup the ip_conntrack tcp established timeout to 5Mins.
+#echo 300 > /proc/sys/net/ipv4/netfilter/ip_conntrack_tcp_timeout_established
+
+# Setup lo Interface Addresses
+/sbin/ifconfig lo 127.0.0.1 netmask 255.0.0.0
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# Setup Hostname
+echo "127.0.0.1	localhost.localdomain localhost" > /etc/hosts
+
+i=0
+while [ $i -lt $lan_main_Count ]
+do
+	eval ip='$lan_main_'$i'_ipAddr'
+	echo "$ip ${hostname} `echo ${hostname} |cut -f1 -d.`" >> /etc/hosts
+	i=`expr $i + 1`
+done
+
+### Move this to Services Start ###
+if [ -f /usr/sbin/dnrd ]; then
+	rm -rf /ramdisk/etc/dnrd
+	mkdir /ramdisk/etc/dnrd
+	/usr/sbin/dnrd
+fi
+
+if [ -f /bin/hostname ]; then
+	/bin/hostname $hostname
+fi
+
+### Move this service to Services Start ###
+# Start System log
+if [ -f /sbin/syslogd ]; then
+	echo "Bringing up syslog"
+#706141 : pramod start
+	if [ "$system_log_mode" = "1" -o "$system_log_mode" = "2" ]; then
+		if [ -n "$system_log_IP" -a "$system_log_IP" != "0.0.0.0" ]; then
+			if [ -n "$system_log_port" -a "$system_log_port" != "0" ]; then
+				if [ "$system_log_mode" = "2" ]; then
+					/sbin/syslogd -L -s $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_SIZE -b $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_COUNT -R $system_log_IP:$system_log_port -l $system_log_log_level
+				else
+					/sbin/syslogd -s $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_SIZE -b $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_COUNT -R $system_log_IP:$system_log_port -l $system_log_log_level
+				fi
+			else
+				if [ "$system_log_mode" = "2" ]; then
+					/sbin/syslogd -L -s $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_SIZE -b $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_COUNT 0 -R $system_log_IP -l $system_log_log_level
+				else
+					/sbin/syslogd -s $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_SIZE -b $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_COUNT 0 -R $system_log_IP -l $system_log_log_level
+				fi
+			fi
+		fi
+#706141 : pramod end 
+	else
+		/sbin/syslogd -s $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_SIZE -b $CONFIG_FEATURE_IFX_SYSTEM_LOG_BUFFER_COUNT -l $system_log_log_level
+	fi
+fi
+
+# Start Kernel log
+if [ -f /sbin/klogd ]; then
+	echo "Bringing up klogd"
+	/sbin/klogd &
+fi
+
+if [ "$CONFIG_FEATURE_IFX_TR69_DEVICE" = "1" ]; then
+	i=0
+	while [ $i -lt $lan_main_Count ]
+	do
+		eval iface='$lan_main_'$i'_interface'
+		/usr/sbin/brctl addbr $iface
+		/usr/sbin/brctl setfd br0 1
+		/usr/sbin/brctl addif $iface eth0 
+		/usr/sbin/brctl stp $iface off
+		i=`expr $i + 1`
+	done
+	/sbin/ifconfig eth0 0.0.0.0 up
+
+	/etc/rc.d/rc.bringup_lan start
+
+	if [ -f /etc/rc.d/udhcpc.script ]; then
+		. /etc/rc.d/init.d/udhcpc start 0
+	fi
+
+	/sbin/route add default dev br0
+
+   # Run some deamons likes http, telnetd
+   /etc/rc.d/rc.bringup_services start
+else
+	if [ "$CONFIG_FEATURE_NAPT" = "1" ]; then
+		if [ -f /usr/sbin/naptcfg ]; then
+			/usr/sbin/naptcfg --FWinit > /dev/null
+			/usr/sbin/naptcfg --NAPTinit > /dev/null
+			/usr/sbin/naptcfg --MACFilterinit > /dev/null
+			/usr/sbin/naptcfg --PacketFilterinit > /dev/null
+	 		/usr/sbin/naptcfg --ServicesACLinit > /dev/null
+		fi
+	fi
+
+	i=0
+	while [ $i -lt $lan_main_Count ]
+	do
+		eval iface='$lan_main_'$i'_interface'
+		/usr/sbin/brctl addbr $iface
+		/usr/sbin/brctl setfd br0 1
+		/usr/sbin/brctl addif $iface eth0 
+		/usr/sbin/brctl stp $iface off
+		i=`expr $i + 1`
+	done
+	#806131:<IFTW-leon> Let board accessing by eth0 before ppa ready
+	/sbin/ifconfig eth0 0.0.0.0 up
+
+      # Start DevM
+      #/etc/rc.d/rc.bringup_services start_devm
+
+	/etc/rc.d/rc.bringup_lan start
+
+	if [ "$CONFIG_FEATURE_IFX_A4" = "1" ]; then
+		#806131:<IFTW-leon> Let board accessing by eth0 before ppa ready start
+		/usr/sbin/brctl delif br0 eth0
+		/sbin/ifconfig br0 0.0.0.0 down
+		/usr/sbin/status_oper SET Lan1_IF_Info STATUS DOWN
+	
+		/sbin/ifconfig eth0 $lan_main_0_ipAddr netmask $lan_main_0_netmask up
+		/usr/sbin/status_oper SET Lan1_IF_Info STATUS "UP" IP "$lan_main_0_ipAddr" MASK "$lan_main_0_netmask"
+		/usr/sbin/naptcfg --ADDLAN eth0
+		/usr/sbin/naptcfg --Servicesinit
+		#806131:<IFTW-leon> Let board accessing by eth0 before  ppa ready end
+	fi
+
+	# Move this to DSL Link Up handling
+	# For autosearch PVC
+	#if  [ "$CONFIG_FEATURE_IFX_AUTOSEARCH" = "1" ]; then
+	#if [ -e /usr/sbin/autosearch_main ]; then
+	#echo "Autosearch PVc is running"
+	#/usr/sbin/autosearch_main &
+	#fi
+
+	#
+	# Setup QOS
+	#
+	if  [ "$CONFIG_FEATURE_QOS" = "1" ]; then
+		/etc/rc.d/init.d/qos init 
+	fi
+
+	#if [ "$CONFIG_FEATURE_CLIP" = "1" ]; then
+	#	/usr/sbin/atmarpd -b -l /dev/null
+	#fi
+
+	if [ "$CONFIG_FEATURE_NAPT" = "1" ]; then
+		/etc/rc.d/rc.firewall start
+		/usr/sbin/naptcfg --VSinit > /dev/null
+		/usr/sbin/naptcfg --PMinit > /dev/null
+		/usr/sbin/naptcfg --DMZinit > /dev/null
+		/usr/sbin/naptcfg --VS 1 > /dev/null
+		/usr/sbin/naptcfg --PM 1 > /dev/null
+
+		if [ "$firewall_dmz_enable" = "1" ]; then
+			/usr/sbin/naptcfg --DMZ 1 > /dev/null
+		fi
+
+		if [ "$ipnat_enable" = "1" ]; then
+			/usr/sbin/naptcfg --NAPT 1 > /dev/null
+		else
+			/usr/sbin/naptcfg --NAPT 0 > /dev/null
+		fi
+	fi
+
+      # Run some deamons likes http, telnetd
+      /etc/rc.d/rc.bringup_services except_devm
+
+fi
+
+if [ -z "$CONFIG_FEATURE_IFX_TR69_DEVICE" -o "$CONFIG_FEATURE_IFX_TR69_DEVICE" = "0" ]; then
+	if [  "$ipnat_enable" = "1" -a "$CONFIG_FEATURE_ALGS" = "1" ]; then
+		/etc/rc.d/init.d/algs start
+	fi
+
+
+	/usr/sbin/status_oper SET "wan_con_index" "windex" "" 
+
+
+	#804281:<IFTW-fchang>.added
+	if [ "$CONFIG_FEATURE_IFX_A4" = "1" ]; then
+		insmod amazon_se_ppa_ppe_a4_hal.o
+		insmod ifx_ppa_api.o
+	fi
+
+
+	/etc/rc.d/rc.bringup_wan start &
+
+	/usr/sbin/status_oper SET "http_wan_vcc_select" "WAN_VCC" "1"
+	/usr/sbin/status_oper SET "wan_main" "ipoption_wan" "UNKNOWN" "WAN_VCC" "0/0"
+	#echo "0" > /tmp/adsl_status
+fi
+
+# start IPQoS
+if  [ "$CONFIG_FEATURE_IPQOS" = "1" ]; then
+# /etc/rc.d/ipqos_init "1200" "0.02" &
+	if [ $qm_enable -eq 1 ]; then
+		/etc/rc.d/ipqos_init &
+	fi
+fi
+
+
+/usr/sbin/version.sh -r&
+
+echo "nameserver 168.95.1.1" > /etc/resolv.conf
+
+if [ "$CONFIG_FEATURE_IFX_USB_DEVICE" = "1" ]; then
+	#/usr/sbin/usb_util &
+
+	if [ "$CONFIG_FEATURE_IFX_USB_DEVICE_MODULE" = "1" ]; then
+		/sbin/insmod dwc_otg_gadget.o
+#806021:<IFTW-Henry>:Solve USB Random MAC problem
+        	board_mac=`/usr/sbin/upgrade mac_get 0`
+        	/sbin/insmod g_ether.o dev_addr="$board_mac"
+        fi
+           
+	#/sbin/insmod g_ether.o
+	#/sbin/insmod g_ether.o idVendor=0x07A6 idProduct=0x4610
+	/usr/sbin/brctl addif $lan_main_0_interface usb0
+	/sbin/ifconfig usb0 0.0.0.0 up
+fi
+if [ "1$CONFIG_FEATURE_IFX_USB_HOST" = "11" ]; then
+	# using IFX8015 usb<->ethernet by default in kernel mode
+	/usr/sbin/brctl addif $lan_main_0_interface eth1
+	/sbin/ifconfig eth1 0.0.0.0 up
+fi
+
+#Start ipv6 enable
+if [ "$CONFIG_FEATURE_IPv6" = "1" -a "$ipv6_status" = "1" ]; then
+kernel_version=`version.sh -k`
+/sbin/insmod /lib/modules/${kernel_version}/kernel/net/ipv6/ipv6.o
+fi
+#ipv6 end
+
+#If tr69 is compiled in, open firewall hole
+#FIXME: move this to enable/disable TR69 from webpage
+
+#if [ "$CONFIG_PACKAGE_IFX_DEVM" = "1" ]; then
+#	/usr/sbin/iptables -t nat -I PREROUTING -p tcp --dport 8000 -j ACCEPT
+#	/usr/sbin/iptables -I INPUT -p tcp --dport 8000 -j ACCEPT
+#fi
+
+#804101:fchang.added.start Add ADSL CRC workaround by changing the DMA polling frequency
+mknod /dev/mem c 1 1
+mem -us 0x1e104114 -w 0x80000010
+#804101:fchang.added.end
+
+echo
+echo "+---------------------------------------------------+"
+echo "| Linux/MIPS on AMAZON_SE by Infineon COM AC BB_CPE |"
+echo "+---------------------------------------------------+"
+
+

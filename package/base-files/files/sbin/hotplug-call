@@ -1,0 +1,39 @@
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+
+export HOTPLUG_TYPE="$1"
+
+### ctc ###
+# bypass the normal hotplug path for firmware loading
+# would otherwise cause problems with drivers like bcm43xx
+[ "firmware" = "$HOTPLUG_TYPE" -a "add" = "$ACTION" ] && {
+	if [ -f "/tmp/$FIRMWARE" ] ; then
+			echo 1 > "/sys$DEVPATH/loading"
+			cat "/tmp/$FIRMWARE" > "/sys$DEVPATH/data"
+			echo 0 > "/sys$DEVPATH/loading"
+	elif [ -f "/tmp/metalink_fw/$FIRMWARE" ]; then
+			echo 1 > "/sys$DEVPATH/loading"
+			cat "/tmp/metalink_fw/$FIRMWARE" > "/sys$DEVPATH/data"
+			echo 0 > "/sys$DEVPATH/loading"
+	elif [ -f "/lib/firmware/$FIRMWARE" ] ; then
+		echo 1 > "/sys$DEVPATH/loading"
+#		cp "/lib/firmware/$FIRMWARE" "/sys$DEVPATH/data"
+		cat "/lib/firmware/$FIRMWARE" > "/sys$DEVPATH/data"
+		echo 0 > "/sys$DEVPATH/loading"
+	fi
+	exit 0
+}
+###########
+
+. /etc/functions.sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+LOGNAME=root
+USER=root
+export PATH LOGNAME USER
+
+[ \! -z "$1" -a -d /etc/hotplug.d/$1 ] && {
+	for script in $(ls /etc/hotplug.d/$1/* 2>&-); do (
+		[ -f $script ] && . $script
+	); done
+}

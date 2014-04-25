@@ -1,0 +1,154 @@
+#!/bin/sh
+#
+# DHCP leasing sccript
+#
+# $1 - action, "add", "del", "old"
+# $2 - MAC address
+# $3 - IP address
+# $4 - hostname
+#
+# available environment variables:
+#		DNSMASQ_CLIENT_ID
+#		DNSMASQ_DOMAIN
+#		DNSMASQ_VENDOR_CLASS
+#		DNSMASQ_SUPPLIED_HOSTNAME
+#		DNSMASQ_USER_CLASS0 .. DNSMASQ_USER_CLASSn
+#		DNSMASQ_LEASE_LENGTH
+#		DNSMASQ_LEASE_EXPIRES
+#		DNSMASQ_TIME_REMAINING
+#		DNSMASQ_OLD_HOSTNAME (old)
+#		DNSMASQ_INTERFACE
+#		DNSMASQ_RELAY_ADDRESS
+#		DNSMASQ_TAGS
+
+ACTION=$1
+MAC=$2
+IP=$3
+HOSTNAME=$4
+
+
+DHCP_LEASE_INFO=/tmp/dhcp_lease.cfg
+
+
+#
+lease_file_chk()
+{
+	if ! [ -f $DHCP_LEASE_INFO ] ; then
+		echo "!"	> $DHCP_LEASE_INFO
+	fi
+}
+
+#
+lease_event_send()
+{
+	if [ -x "/usr/sbin/libmapi_event_cli" ] ; then
+	    IF=`mac2phyport.sh $MAC`
+	    echo $IF | grep wlan
+	    if [ "$?" != "1" ]; then
+			# update hostname for wireless history list.
+			band="0 1"
+			apidx="0 1"
+			for i in $band ; do
+				for j in $apidx ; do
+					WL_HIS_FILE="/tmp/etc/config/wl_clt_his$i$j"
+					HST="$MAC*$HOSTNAME"
+					CHK=`cat $WL_HIS_FILE | grep $MAC`
+					if [ $CHK != $HST ] ; then
+						sed -i "s/$CHK/$HST/g" $WL_HIS_FILE
+					fi
+				done
+			done
+        fi
+	fi
+}
+
+#
+lease_update()
+{
+	lease_file_chk
+
+	OLD_IP=`umngcli -f $DHCP_LEASE_INFO get ip@${MAC}`
+	OLD_MAC=`umngcli -f $DHCP_LEASE_INFO get ${IP}@ip`
+	umngcli -f $DHCP_LEASE_INFO unset *@${MAC}
+	if [ -n "${OLD_MAC}" ] ; then
+		umngcli -f $DHCP_LEASE_INFO unset *@${OLD_MAC}
+	fi
+	if [ -n "${OLD_IP}" ] ; then
+		umngcli -f $DHCP_LEASE_INFO unset ${OLD_IP}@ip
+	fi
+
+	INTF=`/usr/sbin/mac2phyport.sh ${MAC}`
+	if [ -z "$INTF" ] ; then
+		INTF=$DNSMASQ_INTERFACE
+	fi
+
+	umngcli -f $DHCP_LEASE_INFO set ip@${MAC}="$IP"
+	umngcli -f $DHCP_LEASE_INFO set hostname@${MAC}="$HOSTNAME"
+	umngcli -f $DHCP_LEASE_INFO set uptime@${MAC}="`cut -d ' ' -f 1 /proc/uptime`"
+	umngcli -f $DHCP_LEASE_INFO set intf@${MAC}="$INTF"
+	if [ -n "$DNSMASQ_CLIENT_ID" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set client_id@${MAC}="$DNSMASQ_CLIENT_ID"
+	fi
+	if [ -n "$DNSMASQ_DOMAIN" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set domain@${MAC}="$DNSMASQ_DOMAIN"
+	fi
+	if [ -n "$DNSMASQ_VENDOR_CLASS" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set vendorclass@${MAC}="$DNSMASQ_VENDOR_CLASS"
+	fi
+	if [ -n "$DNSMASQ_SUPPLIED_HOSTNAME" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set supplied_hostname@${MAC}="$DNSMASQ_SUPPLIED_HOSTNAME"
+	fi
+	if [ -n "$DNSMASQ_USER_CLASS0" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set userclass0@${MAC}="$DNSMASQ_USER_CLASS0"
+	fi
+	if [ -n "$DNSMASQ_USER_CLASS1" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set userclass0@${MAC}="$DNSMASQ_USER_CLASS1"
+	fi
+	if [ -n "$DNSMASQ_USER_CLASS2" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set userclass0@${MAC}="$DNSMASQ_USER_CLASS2"
+	fi
+	if [ -n "$DNSMASQ_USER_CLASS3" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set userclass0@${MAC}="$DNSMASQ_USER_CLASS3"
+	fi
+	if [ -n "$DNSMASQ_LEASE_EXPIRES" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set lease_expires@${MAC}="$DNSMASQ_LEASE_EXPIRES"
+	fi
+	if [ -n "$DNSMASQ_LEASE_LENGTH" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set lease_length@${MAC}="$DNSMASQ_LEASE_LENGTH"
+	fi
+	if [ -n "$DNSMASQ_TIME_REMAINING" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set time_remain@${MAC}="$DNSMASQ_TIME_REMAINING"
+	fi
+	if [ -n "$DNSMASQ_OLD_HOSTNAME" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set old_hostname@${MAC}="$DNSMASQ_OLD_HOSTNAME"
+	fi
+	if [ -n "$DNSMASQ_TAGS" ] ; then
+		umngcli -f $DHCP_LEASE_INFO set tags@${MAC}="$DNSMASQ_TAGS"
+	fi
+
+	umngcli -f $DHCP_LEASE_INFO set ${IP}@ip="${MAC}"
+
+	lease_event_send
+}
+
+#
+lease_del()
+{
+	lease_file_chk
+
+	umngcli -f $DHCP_LEASE_INFO unset *@${MAC}
+	umngcli -f $DHCP_LEASE_INFO unset ${IP}@ip
+
+	lease_event_send
+}
+
+
+case "$ACTION" in
+	"add")	lease_update	;;
+	"old")	lease_update	;;
+	"del")	lease_del		;;
+	*)		exit 1			;;
+esac
+
+exit 0
+

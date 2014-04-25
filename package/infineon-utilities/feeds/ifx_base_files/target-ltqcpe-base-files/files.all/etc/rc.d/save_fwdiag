@@ -1,0 +1,8 @@
+#!/bin/sh
+
+cp -f /ramdisk/flash/fwdiag /tmp
+cd /tmp
+/bin/gzip fwdiag
+/usr/sbin/upgrade fwdiag.gz fwdiag 0 0
+/bin/rm -f fwdiag.gz
+cd /root

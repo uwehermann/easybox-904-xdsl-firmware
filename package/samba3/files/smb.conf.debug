@@ -1,0 +1,31 @@
+[global]
+	netbios name = ArcadyanZZ 
+	workgroup = WORKGROUP
+	server string = Arcadyan IAD ZZ File Server
+	syslog = 10
+	encrypt passwords = true
+#	passdb backend = smbpasswd
+	obey pam restrictions = yes
+	socket options = TCP_NODELAY
+	unix charset = ISO-8859-1
+	preferred master = yes
+	os level = 20
+	security = SHARE
+	guest ok = yes
+	guest account = root
+#	invalid users = root
+#	smb passwd file = /etc/samba/smbpasswd
+
+[homes]
+	comment = Home Directories
+	browseable = no
+	read only = no
+	create mode = 0750
+
+[usb]
+	path = /tmp/usb
+	read only = no
+	writable = yes
+	guest ok = yes
+	create mask = 0777
+	directory mask = 0777

@@ -1,0 +1,51 @@
+COMMON
+~~~~~~
+
+libdlna aims at being the reference open-source implementation
+of DLNA (Digital Living Network Alliance) standards.
+Its primary goal is to provide DLNA support to uShare, an embedded UPnP A/V
+Media Server, but will be used to build both DLNA servers and players.
+
+libdlna relies on FFMPEG librairies (libavformat and libavcodec)
+to handle and demux A/V streams.
+
+HOMEPAGE
+========
+
+Web site and file area for libdlna is hosted on GeeXboX server :
+
+   http://libdlna.geexbox.org/
+
+The latest version of libdlna should always be available on this site.
+
+DEVELOPERS
+~~~~~~~~~~
+
+Build using traditional ./configure && make commands.
+Try ./configure --help for list of available build options.
+
+libdlna uses GNU Coding Standards as default indentation and code style.
+Please always conform to this standard before applying your changes.
+
+SUPPORTED DLNA PROFILES
+=======================
+
+- Image: JPEG, PNG
+- Audio: AC3, AMR, ATRAC3, LPCM, MP3, MPEG-4 (AAC), WMA
+- AV:    MPEG-1, MPEG-2, MPEG-4 Part 2 (SP, ASP), MPEG-4 Part 10 (a.k.a AVC)
+
+SUPPORTED FILE CONTAINERS
+=========================
+
+- Image: jpg, jpe, jpeg, png
+
+- Audio: 3gp, aac, ac3, acm, aiff, amr, at3p, asf, lpcm, m4a, mov, mp3, mp4,
+         pcm, qt, wav, wma 
+
+- AV:    3gp, 3gpp, asf, hdmov, m1v, m2v, mov, mp2p, mp2t, mp4, mpe, mpeg,
+         mpg, pes, ps, ts, wmv
+
+AUTHORS
+~~~~~~~
+
+Benjamin Zores <ben@geexbox.org>

@@ -1,0 +1,52 @@
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+START=50
+
+has_root_pwd() {
+	local pwd=$([ -f "$1" ] && cat "$1")
+	      pwd="${pwd#*root:}"
+	      pwd="${pwd%%:*}"
+
+	test -n "${pwd#!}"
+}
+
+start() {
+	local MPTEST
+	local PROMOD
+
+	MPTEST=`/bin/grep -ci mptest /proc/cmdline`
+	NOVLAN=`/bin/grep -ci novlan /proc/cmdline`
+
+	if ([ "$MPTEST" -ge 1 ] || [ "$NOVLAN" -ge 1 ]);
+	then
+		rm /etc/config/passwd+
+	fi
+
+	if ( ! has_root_pwd /etc/passwd && ! has_root_pwd /etc/shadow ) || \
+	   ( [ ! -x /usr/sbin/dropbear ] && [ ! -x /usr/sbin/sshd ] );
+	then
+		telnetd -l /bin/login.sh
+	elif [ "$MPTEST" -ge 1 ] ; then
+		echo "root::0:0:root:/:/bin/ash" > /etc/config/passwd
+		telnetd -l /bin/login.sh
+	elif [ "$NOVLAN" -ge 1 ] ; then
+		echo "root::0:0:root:/:/bin/ash" > /etc/config/passwd
+		telnetd -l /bin/login.sh
+	fi
+}
+
+stop() {
+	killall telnetd 2>/dev/null
+}
+
+
+case "$1" in
+	"boot")		start& ;;
+	"start")	start& ;;
+	"stop")		stop;;
+	*)
+				echo $0 'boot  - setup and start TELNET service'
+				echo $0 'start - start TELNET service'
+				echo $0 'stop  - stop TELNET service'
+				;;
+esac

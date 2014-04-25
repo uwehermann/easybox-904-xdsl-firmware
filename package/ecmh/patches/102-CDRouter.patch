@@ -1,0 +1,892 @@
+diff -uN ecmh_yu/src_o/common.c ecmh-2005.02.09/src/common.c
+--- ecmh_yu/src_o/common.c	2012-07-13 10:17:33.774782000 +0800
++++ ecmh-2005.02.09/src/common.c	2012-07-12 10:59:45.608660000 +0800
+@@ -8,6 +8,37 @@
+ 
+ #include "ecmh.h"
+ 
++#if 1 
++void dolog(int level, const char *sFmt, ...)
++{
++	va_list	vlVars;
++	FILE	*fnOut ;
++	char	sBuf[512] = {0};
++	
++	if (false == g_conf->verbose)
++		return; 
++
++	fnOut = fopen("/dev/console", "w");
++
++	va_start(vlVars,sFmt);
++	sprintf(sBuf, "[%6s] ", level == LOG_DEBUG ?	"debug" : (level == LOG_ERR ?	"error" : (level == LOG_WARNING ?	"warn" : (level == LOG_INFO ?	"info" : ""))));
++
++	vsnprintf(sBuf+strlen(sBuf), sizeof(sBuf)-strlen(sBuf), sFmt, vlVars);
++
++	va_end(vlVars);
++
++	if (sBuf[sizeof(sBuf)-1] != '\0')
++	{
++		fprintf( fnOut, "NOTE: osPrintfConsole() overflow!!!\n");
++	}
++
++	sBuf[sizeof(sBuf)-1] = '\0';
++
++	fprintf( fnOut, "%s", sBuf );
++	fflush( fnOut );
++	fclose( fnOut );
++}
++#else 
+ void dolog(int level, const char *fmt, ...)
+ {
+ 	va_list ap;
+@@ -30,6 +61,7 @@
+ 	}
+ 	va_end(ap);
+ }
++#endif
+ 
+ int huprunning()
+ {
+diff -uN ecmh_yu/src_o/ecmh.c ecmh-2005.02.09/src/ecmh.c
+--- ecmh_yu/src_o/ecmh.c	2012-07-13 10:17:33.793774000 +0800
++++ ecmh-2005.02.09/src/ecmh.c	2012-07-13 09:46:25.484526000 +0800
+@@ -51,6 +51,69 @@
+ /**************************************
+   Functions
+ **************************************/
++void ref_subscrn(void);
++void ref_subscrn(void)
++{
++	struct groupnode	*groupn;
++	struct listnode		*ln, *ln2;
++	struct grpintnode	*grpintn;
++	struct listnode		*gn, *gn2;
++	struct subscrnode	*subscrn;
++	struct listnode		*ssn, *ssn2;
++	struct intnode		*intn;
++	char	str[128] = {0};
++	time_t	time_tee;
++
++	/* Timeout all the groups that didn't refresh yet */
++	LIST_LOOP2(g_conf->groups, groupn, ln, ln2)
++	{
++		LIST_LOOP2(groupn->interfaces, grpintn, gn, gn2)
++		{
++			LIST_LOOP2(grpintn->subscriptions, subscrn, ssn, ssn2)
++			{
++				/* Calculate the difference */
++				/* Dead too long? */
++				if((MLD2_BLOCK_OLD_SOURCES == subscrn->mode)||( MLD2_CHANGE_TO_INCLUDE == subscrn->mode))
++				{
++					/*send report */
++					dolog(LOG_DEBUG, "d_del sub %d\n", subscrn->mode);
++
++					/* Dead too long -> delete it */
++					list_delete_node(grpintn->subscriptions, ssn);
++					/* Destroy the subscription itself */
++					subscr_destroy(subscrn);
++				}
++				else if(MLD2_CHANGE_TO_EXCLUDE == subscrn->mode)
++					subscrn->mode = MLD2_MODE_IS_EXCLUDE;
++
++				else if(MLD2_ALLOW_NEW_SOURCES == subscrn->mode)
++					subscrn->mode = MLD2_MODE_IS_INCLUDE;
++			}
++			LIST_LOOP2_END
++			if (grpintn->subscriptions->count == 0)
++			{
++				/* Delete from the list */
++				dolog(LOG_DEBUG, "d_del interface %d\n", groupn->interfaces);
++				list_delete_node(groupn->interfaces, gn);
++				/* Destroy the grpint */
++				grpint_destroy(grpintn);
++			}
++		}
++		LIST_LOOP2_END
++
++		if (groupn->interfaces->count == 0)
++		{
++			/* Delete from the list */
++			inet_ntop(AF_INET6, &groupn->mca, str, sizeof(str));
++			dolog(LOG_DEBUG, "d_del groups %s\n", str);
++			list_delete_node(g_conf->groups, ln);
++			/* Destroy the group */
++			group_destroy(groupn);
++		}
++	}
++	LIST_LOOP2_END
++}
++
+ uint16_t inchksum(const void *data, uint32_t length);
+ uint16_t inchksum(const void *data, uint32_t length)
+ {
+@@ -488,6 +551,82 @@
+ 	intn->stat_icmp_sent++;
+ }
+ 
++void mldv1_send_query(struct intnode *intn, const struct in6_addr *mca, const struct in6_addr *src, bool suppression);
++void mldv1_send_query(struct intnode *intn, const struct in6_addr *mca, const struct in6_addr *src, bool suppression)
++{
++	struct mld_query_packet
++	{
++		struct ip6_hdr		ip6;
++		struct ip6_hbh		hbh;
++		struct
++		{
++			uint8_t		type;
++			uint8_t		length;
++			uint16_t	value;
++			uint8_t		optpad[2];
++		}			routeralert;
++		struct mld1		mldq;
++		
++	} packet;
++	unsigned int	packetlen;
++
++	/* Don't send queries to upstreams */
++	if (intn->upstream) return;
++
++	memset(&packet, 0, sizeof(packet));
++
++	/* Create the IPv6 packet */
++	packet.ip6.ip6_vfc		= 0x60;
++	packet.ip6.ip6_nxt		= IPPROTO_HOPOPTS;
++	packet.ip6.ip6_hlim		= 1;
++
++	/*
++	 * The source address must be the link-local address
++	 * of the interface we are sending on
++	 */
++	memcpy(&packet.ip6.ip6_src, &intn->linklocal, sizeof(packet.ip6.ip6_src));
++
++	/* Generaly Query -> link-scope all-nodes (ff02::1) */
++	packet.ip6.ip6_dst.s6_addr[0]	= 0xff;
++	packet.ip6.ip6_dst.s6_addr[1]	= 0x02;
++	packet.ip6.ip6_dst.s6_addr[15]	= 0x01;
++
++	/* HopByHop Header Extension */
++	packet.hbh.ip6h_nxt		= IPPROTO_ICMPV6;
++	packet.hbh.ip6h_len		= 0;
++	
++	/* Router Alert Option */
++	packet.routeralert.type		= 5;
++	packet.routeralert.length	= sizeof(packet.routeralert.value);
++	packet.routeralert.value	= 0;			/* MLD ;) */
++
++	/* Option Padding */
++	packet.routeralert.optpad[0]	= IP6OPT_PADN;
++	packet.routeralert.optpad[1]	= 0;
++
++	/* ICMPv6 MLD Query */
++	packet.mldq.type		= ICMP6_MEMBERSHIP_QUERY;
++	packet.mldq.mrc			= htons(2000);
++
++	/*
++	 * The address to query, can be in6addr_any to
++	 * query for everything or a specific group
++	 */
++	memcpy(&packet.mldq.mca, mca, sizeof(*mca));
++
++	packetlen			= sizeof(packet);
++
++	/* Calculate and fill in the checksum */
++	packet.ip6.ip6_plen		= htons(packetlen - sizeof(packet.ip6));
++	packet.mldq.csum		= ipv6_checksum(&packet.ip6, IPPROTO_ICMPV6, (uint8_t *)&packet.mldq, packetlen - sizeof(packet.ip6) - sizeof(packet.hbh) - sizeof(packet.routeralert));
++
++	sendpacket6(NULL, intn, (const struct ip6_hdr *)&packet, packetlen);
++
++	/* Increase ICMP sent statistics */
++	g_conf->stat_icmp_sent++;
++	intn->stat_icmp_sent++;
++}
++
+ /*
+  * MLDv1 and MLDv2 are backward compatible when doing Queries
+  * aka a router implementing MLDv2 can send the same query
+@@ -617,6 +756,72 @@
+ 	intn->stat_icmp_sent++;
+ }
+ 
++void mld1_send_done(struct intnode *intn, const struct in6_addr *mca);
++void mld1_send_done(struct intnode *intn, const struct in6_addr *mca)
++{
++	struct mld_report_packet
++	{
++		struct ip6_hdr		ip6;
++		struct ip6_hbh		hbh;
++		struct
++		{
++			uint8_t		type;
++			uint8_t		length;
++			uint16_t	value;
++			uint8_t		optpad[2];
++		}			routeralert;
++		
++		struct mld1		mld1;
++		
++	} packet;
++
++	dolog(LOG_DEBUG,"mld1 send done\n");
++	memset(&packet, 0, sizeof(packet));
++
++	/* Create the IPv6 packet */
++	packet.ip6.ip6_vfc		= 0x60;
++	packet.ip6.ip6_plen		= ntohs(sizeof(packet) - sizeof(packet.ip6));
++	packet.ip6.ip6_nxt		= IPPROTO_HOPOPTS;
++	packet.ip6.ip6_hlim		= 1;
++
++	/*
++	 * The source address must be the link-local address
++	 * of the interface we are sending on
++	 */
++	memcpy(&packet.ip6.ip6_src, &intn->linklocal, sizeof(packet.ip6.ip6_src));
++
++	/* Report -> Multicast address */
++	memcpy(&packet.ip6.ip6_dst, mca, sizeof(*mca));
++
++	/* HopByHop Header Extension */
++	packet.hbh.ip6h_nxt		= IPPROTO_ICMPV6;
++	packet.hbh.ip6h_len		= 0;
++
++	/* Router Alert Option */
++	packet.routeralert.type		= 5;
++	packet.routeralert.length	= sizeof(packet.routeralert.value);
++	packet.routeralert.value	= 0;			/* MLD ;) */
++
++	/* Option Padding */
++	packet.routeralert.optpad[0]	= IP6OPT_PADN;
++	packet.routeralert.optpad[1]	= 0;
++
++	/* ICMPv6 MLD Report */
++	packet.mld1.type		= ICMP6_MEMBERSHIP_REDUCTION;
++	packet.mld1.mrc			= 0;
++	memcpy(&packet.mld1.mca, mca, sizeof(*mca));
++
++	/* Calculate and fill in the checksum */
++	packet.mld1.csum		= ipv6_checksum(&packet.ip6, IPPROTO_ICMPV6, (uint8_t *)&packet.mld1, sizeof(packet.mld1));
++
++	dolog(LOG_DEBUG, "Sending MLDv1 Report done on %s/%u\n", intn->name, intn->ifindex);
++	sendpacket6(NULL, intn, (const struct ip6_hdr *)&packet, sizeof(packet));
++
++	/* Increase ICMP sent statistics */
++	g_conf->stat_icmp_sent++;
++	intn->stat_icmp_sent++;
++}
++
+ void mld1_send_report(struct intnode *intn, const struct in6_addr *mca);
+ void mld1_send_report(struct intnode *intn, const struct in6_addr *mca)
+ {
+@@ -706,7 +911,10 @@
+ 	}				*packet;
+ 	struct mld2_grec		*grec = NULL;
+ 	struct in6_addr			*src = NULL;
+-	bool				any = false;
++	bool	any = false;
++	char	str[INET6_ADDRSTRLEN] = {0};
++	char	str2[INET6_ADDRSTRLEN] = {0};
++	int		tmp_nsrcs = 0;
+ 
+ 	if (intn->mtu < sizeof(*packet))
+ 	{
+@@ -792,8 +1000,21 @@
+ 			/* Go through the subscriptions */
+ 			LIST_LOOP(grpintn->subscriptions, subscrn, sn)
+ 			{
++				dolog(LOG_DEBUG,"sub mode %d\n", subscrn->mode);
+ 				/* Exclusion record? -> Skip it, thus excluding it */
+-				if (subscrn->mode == MLD2_MODE_IS_EXCLUDE) continue;
++
++				if(!IN6_IS_ADDR_UNSPECIFIED(&groupn->mca))
++				{
++					if(NULL == inet_ntop(AF_INET6, &groupn->mca, str, sizeof(str)))
++						dolog(LOG_DEBUG, "notp error");
++					dolog(LOG_DEBUG, "group_mca:%s\n", str);
++				}
++				if(!IN6_IS_ADDR_UNSPECIFIED(&subscrn->ipv6))
++				{
++					if(NULL == inet_ntop(AF_INET6, &subscrn->ipv6, str2, sizeof(str2)))
++						dolog(LOG_DEBUG, "notp error");
++					dolog(LOG_DEBUG,"sub:%s\n", str2);
++				}
+ 
+ 				/* Any sources already? */
+ 				if (src)
+@@ -846,6 +1067,7 @@
+ 				if ((length + sizeof(packet->ip6) + (grec ? 0 : sizeof(*grec)) +
+ 					   (any || IN6_IS_ADDR_UNSPECIFIED(&subscrn->ipv6) ? 0 : sizeof(*src))) > intn->mtu)
+ 				{
++					dolog(LOG_DEBUG,"greater tha MTU!!!! \n");
+ 					if (!grec)
+ 					{
+ 						/* Should not happen! Would mean the MTU is smaller than a standard mld report */
+@@ -880,14 +1102,17 @@
+ 				if (!src)
+ 				{
+ 					/* A new grec */
++					dolog(LOG_DEBUG, "a new grec\n");
+ 					packet->mld2r.ngrec++;
+ 					/* Already a grec in the packet? */
+ 					if (grec)
+ 					{
+ 						/* Fixup endianness */
+-						grec->grec_nsrcs = htons(grec->grec_nsrcs);
+ 						/* Next grec */
+-						grec = (struct mld2_grec *)(((char *)grec) + sizeof(*grec) + (sizeof(*src) * grec->grec_nsrcs));
++						tmp_nsrcs = grec->grec_nsrcs;
++						grec->grec_nsrcs = htons(grec->grec_nsrcs);
++						dolog(LOG_DEBUG, "grec is not NULL src:%d\n", tmp_nsrcs);
++						grec = (struct mld2_grec *)(((char *)grec) + sizeof(*grec) + (sizeof(*src) * tmp_nsrcs  ));
+ 					}
+ 					else
+ 					{
+@@ -902,7 +1127,7 @@
+ 					grec->grec_nsrcs = 0;
+ 
+ 					/* 0 Sources -> Exclude those */
+-					grec->grec_type = MLD2_MODE_IS_EXCLUDE;
++					grec->grec_type = subscrn->mode;
+ 
+ 					/* Nothing added yet */
+ 					any = false;
+@@ -911,13 +1136,14 @@
+ 				/* Only add non-:: addresses */
+ 				if (!IN6_IS_ADDR_UNSPECIFIED(&subscrn->ipv6))
+ 				{
++					dolog(LOG_DEBUG, "sub addr unsepcified\n" );
+ 					/* First/Next address */
+ 					src = (struct in6_addr *)(((char *)grec) + sizeof(*grec) + (sizeof(*src) * grec->grec_nsrcs));
+ 					/* An additional source */
+ 					grec->grec_nsrcs++;
+ 
+ 					/* State becomes include */
+-					grec->grec_type = MLD2_MODE_IS_INCLUDE;
++					grec->grec_type = subscrn->mode;
+ 
+ 					/* Append the source address */
+ 					memcpy(src, &subscrn->ipv6, sizeof(*src));
+@@ -933,6 +1159,7 @@
+ 	{
+ 		free(packet);
+ 		packet = NULL;
++		dolog(LOG_DEBUG, "nothing to send\n");
+ 		return;
+ 	}
+ 
+@@ -978,6 +1205,10 @@
+ 		mld2_send_report(intn, mca);
+ 	}
+ #endif /* EMCH_SUPPORT_MLD2 */
++	else
++	{
++		dolog(LOG_DEBUG,"error not send report,v%d\n",intn->mld_version );
++	}
+ }
+ 
+ void mld_send_report_all(struct intnode *interface, const struct in6_addr *mca);
+@@ -1137,16 +1368,22 @@
+ {
+ 	char mca[INET6_ADDRSTRLEN];
+ 	memset(mca,0,sizeof(mca));
+-	inet_ntop(AF_INET6, i_mca, mca, sizeof(mca));
+-	dolog(level, fmt, mca, intn->name, intn->ifindex);
++	if(i_mca != NULL && intn != NULL)
++	{
++		inet_ntop(AF_INET6, i_mca, mca, sizeof(mca));
++		dolog(level, fmt, mca, intn->name, intn->ifindex);
++	}
+ }
+ 
+ void l4_ipv6_icmpv6_mld1_report(struct intnode *intn, const struct ip6_hdr *iph, const uint16_t len, struct mld1 *mld1, const uint16_t plen);
+ void l4_ipv6_icmpv6_mld1_report(struct intnode *intn, const struct ip6_hdr *iph, const uint16_t len, struct mld1 *mld1, const uint16_t plen)
+ {
+-	struct grpintnode	*grpintn;
++	struct grpintnode	*grpintn = NULL;
++	struct groupnode	*groupn = NULL;
+ 	struct in6_addr		any;
+-	bool			isnew;
++	struct intnode		*intn2;
++	bool	isnew;
++	int 	i = 0;
+ 
+ #ifdef ECMH_SUPPORT_MLDV2
+ 	if (g_conf->mld2only)
+@@ -1182,17 +1419,35 @@
+ 		mld_log(LOG_WARNING, "Couldn't find or create new group %s for %s/%u\n", &mld1->mca, intn);
+ 		return;
+ 	}
++	groupn = group_find(&mld1->mca);
++	if (!groupn)
++	{
++		mld_log(LOG_WARNING, "Couldn't find the group %s for %s/%u\n", &mld1->mca, intn);
++		return;
++	}
++	groupn->ismldv1 = true;
+ 
+ 	/* No source address, so use any */
+ 	memset(&any, 0, sizeof(any));
+ 	
+-	if (!grpint_refresh(grpintn, &any, MLD2_MODE_IS_INCLUDE))
++	if (!grpint_refresh(grpintn, &any, MLD2_MODE_IS_EXCLUDE))
+ 	{
+ 		mld_log(LOG_WARNING, "Couldn't create subscription to %s for %s/%u\n", &mld1->mca, intn);
+ 		return;
+ 	}
+ 
+-	if (isnew) mld_send_report_all(intn, &mld1->mca);
++	for (i=0; i<g_conf->maxinterfaces; i++)
++	{
++		intn2 = &g_conf->ints[i];
++
++		/*
++		 * - Skip unconfigured interfaces
++		 * - Skip the interface it came from
++		 */
++		if (intn2->mtu == 0 || intn->ifindex == intn2->ifindex) continue;
++		/* Send the MLD Report */
++		mld1_send_report(intn2, &mld1->mca);
++	}
+ 
+ 	return;
+ }
+@@ -1202,7 +1457,11 @@
+ {
+ 	struct groupnode	*groupn;
+ 	struct grpintnode	*grpintn;
++	struct intnode 		*intn2;
+ 	struct in6_addr		any;
++	int i = 0;
++
++	memset(&any, 0, sizeof(any));
+ 
+ #ifdef ECMH_SUPPORT_MLDV2
+ 	if (g_conf->mld2only)
+@@ -1246,27 +1505,27 @@
+ 		return;
+ 	}
+ 
+-	/* No source address, so use any */
+-	memset(&any, 0, sizeof(any));
+-
+-	if (!subscr_unsub(grpintn->subscriptions, &any))
++	if (!grpint_refresh(grpintn, &any, MLD2_CHANGE_TO_INCLUDE))
+ 	{
+-		mld_log(LOG_WARNING, "Couldn't unsubscribe from %s on interface %s/%u\n", &mld1->mca, intn);
++		mld_log(LOG_WARNING, "Couldn't refresh subscription to %s for %s/%u\n", &mld1->mca, intn);
+ 		return;
+ 	}
+ 
+-	if (grpintn->subscriptions->count <= 0)
++	for (i=0; i<g_conf->maxinterfaces; i++)
+ 	{
+-		/* Requery if somebody still want it, as it will timeout otherwise. */
+-		mld_log(LOG_DEBUG, "Querying for other listeners to %s on interface %s/%u\n", &mld1->mca, intn);
+-		mld_send_query(intn, &mld1->mca, NULL, false);
++		intn2 = &g_conf->ints[i];
+ 
+-#ifdef ECMH_SUPPORT_MLD2
+-		/* Skip Robustness */
+-		grpintn->subscriptions->count = -ECMH_ROBUSTNESS_FACTOR;
+-#endif
++		/*
++		 * - Skip unconfigured interfaces
++		 * - Skip the interface it came from
++		 */
++		if (intn2->mtu == 0 || intn->ifindex == intn2->ifindex) continue;
++		/* Send the MLD Report */
++		mld1_send_done(intn2, &mld1->mca);
+ 	}
+ 
++	mldv1_send_query(intn, &mld1->mca, NULL, false);
++	ref_subscrn();
+ 	return;
+ }
+ 
+@@ -1274,13 +1533,14 @@
+ void l4_ipv6_icmpv6_mld2_report(struct intnode *intn, const struct ip6_hdr *iph, const uint16_t len, struct mld2_report *mld2r, const uint16_t plen);
+ void l4_ipv6_icmpv6_mld2_report(struct intnode *intn, const struct ip6_hdr *iph, const uint16_t len, struct mld2_report *mld2r, const uint16_t plen)
+ {
+-	char			mca[INET6_ADDRSTRLEN], srct[INET6_ADDRSTRLEN];
++	char	mca[INET6_ADDRSTRLEN], srct[INET6_ADDRSTRLEN];
++	bool	isnew = false;
++	bool	isref = false;
+ 	struct grpintnode	*grpintn = NULL;
+ 	struct in6_addr		*src, any;
+ 	struct mld2_grec	*grec = (struct mld2_grec *)(((char *)mld2r)+sizeof(*mld2r));
+ 	unsigned int ngrec	= ntohs(mld2r->ngrec), nsrcs = 0;
+-	bool			isnew = false;
+-
++	
+ #ifdef ECMH_SUPPORT_MLDV2
+ 	if (g_conf->mld1only)
+ 	{
+@@ -1312,6 +1572,7 @@
+ 
+ 	while (ngrec > 0)
+ 	{
++		isnew = false;
+ 		/* Check if we are still inside the packet */
+ 		if (((char *)grec) > (((char *)mld2r)+plen))
+ 		{
+@@ -1357,21 +1618,26 @@
+ 				mld_log(LOG_WARNING, "L4:IPv6:ICMPv6:MLD2_Report Couldn't find or create new group for %s on %s/%u\n", &grec->grec_mca, intn);
+ 			}
+ 		}
++		else
++		{
++			grec = (struct mld2_grec *)(((char *)src) + nsrcs*sizeof(*src) + grec->grec_auxwords);
++			ngrec--;
++			dolog(LOG_DEBUG, "continue\n");
++			continue;
++		}
+ 
+ 		if (nsrcs == 0)
+ 		{
+ 			if (grpintn)
+ 			{
+-				if (!grpint_refresh(grpintn, &any,
+-					grec->grec_type == MLD2_MODE_IS_EXCLUDE ||
+-					grec->grec_type == MLD2_CHANGE_TO_EXCLUDE ||
+-					grec->grec_type == MLD2_BLOCK_OLD_SOURCES ?
+-					MLD2_MODE_IS_INCLUDE : MLD2_MODE_IS_EXCLUDE))
++				if (!grpint_refresh(grpintn, &any, grec->grec_type))
+ 				{
+ 					mld_log(LOG_WARNING, "Couldn't refresh subscription to %s for %s/%u\n",
+ 						&grec->grec_mca, intn);
+ 					return;
+ 				}
++				else
++					isnew = true; 
+ 			}
+ 		}
+ 		else
+@@ -1388,11 +1654,7 @@
+ 				/* Skip if we didn't get a grpint */
+ 				if (grpintn)
+ 				{
+-					if (!grpint_refresh(grpintn, src,
+-						grec->grec_type == MLD2_MODE_IS_EXCLUDE ||
+-						grec->grec_type == MLD2_CHANGE_TO_EXCLUDE ||
+-						grec->grec_type == MLD2_BLOCK_OLD_SOURCES ?
+-						MLD2_MODE_IS_EXCLUDE : MLD2_MODE_IS_INCLUDE))
++					if (!grpint_refresh(grpintn, src, grec->grec_type))
+ 					{
+ 						mld_log(LOG_ERR, "Couldn't subscribe sourced from %s on %s/%u\n", src, intn);
+ 					}
+@@ -1402,15 +1664,26 @@
+ 				src = (struct in6_addr *)(((char *)src) + sizeof(*src));
+ 				nsrcs--;
+ 			}
++			isnew = true; 
+ 		}
+ 
+-		if (isnew) mld_send_report_all(intn, &grec->grec_mca);
++		if (true == isnew) 
++		{
++			mld_send_report_all(intn, &grec->grec_mca);
++			if((grec->grec_type == MLD2_BLOCK_OLD_SOURCES)||(grec->grec_type == MLD2_CHANGE_TO_INCLUDE))
++			{
++				isref = true;
++				mld_send_query(intn, &grec->grec_mca, NULL, false);
++			}
++		}
++		else dolog(LOG_DEBUG, "is not new,don't send\n");
+ 
+ 		/* Next grec, also skip the auxwords */
+ 		grec = (struct mld2_grec *)(((char *)src) + grec->grec_auxwords);
+ 		ngrec--;
+ 	}
+-
++	if(true == isref)
++		ref_subscrn();
+ 	return;
+ }
+ #endif /* ECMH_SUPPORT_MLD2 */
+@@ -1419,12 +1692,17 @@
+ void l4_ipv6_icmpv6_mld_query(struct intnode *intn, const struct ip6_hdr *iph, const uint16_t len, struct mld2_query *mld, const uint16_t plen)
+ {
+ 	struct groupnode	*groupn;
+-	struct listnode		*ln;
++	struct listnode		*ln , *sn;
+ 	struct grpintnode	*grpintn;
++	struct subscrnode	*subscrn;
+ 	struct listnode		*gn;
++	bool	ismldv1 = false;
++	time_t	time_tee;
++	int		i = 0;
+ 
+ 	dolog(LOG_DEBUG, "Received a ICMPv6 MLD Query on %s\n", intn->name);
+ 	
++	ref_subscrn();
+ 	/* It's MLDv1 when the packet has the size of a MLDv1 packet */
+ 	if (plen == sizeof(struct mld1))
+ 	{
+@@ -1435,6 +1713,8 @@
+ 			return;
+ 		}
+ #endif
++		ismldv1 = true;
++		dolog(LOG_DEBUG, "Is MLDV1 query\n");
+ 		int_set_mld_version(intn, 1);
+ 	}
+ 
+@@ -1461,7 +1741,7 @@
+ 	 * as the above code just determined what
+ 	 * version it is.
+ 	 */
+-	if (!g_conf->mld2only && (g_conf->mld1only || intn->mld_version == 0 || intn->mld_version == 1))
++	if(true == ismldv1)
+ 	{
+ #endif /* ECMH_SUPPORT_MLD2 */
+ 		/* MLDv1 sends reports one group at a time */
+@@ -1475,10 +1755,10 @@
+ 			LIST_LOOP(groupn->interfaces, grpintn, gn)
+ 			{
+ 				/* We only are sending for this interface */
+-				if (grpintn->ifindex != intn->ifindex) continue;
++				if (grpintn->ifindex == intn->ifindex) continue;
+ 	
+ 				/* Report this group to the querying router */
+-				mld_send_report(intn, &groupn->mca);
++				mld1_send_report(intn, &groupn->mca);
+ 			}
+ 		}
+ #ifdef ECMH_SUPPORT_MLD2
+@@ -1486,7 +1766,17 @@
+ 	else if (!g_conf->mld1only && (g_conf->mld2only || intn->mld_version == 2))
+ 	{
+ 		/* Send all the groups to this interface */
+-		mld2_send_report(intn, NULL);
++		if (IN6_IS_ADDR_MULTICAST(&mld->mca))
++		{
++			dolog(LOG_DEBUG, "report mca\n");
++			mld2_send_report(intn, &mld->mca);
++		}
++		else
++		{
++			dolog(LOG_DEBUG, "report all\n");
++			mld2_send_report(intn, NULL);
++		}
++
+ 	}
+ 	else dolog(LOG_DEBUG, "Did not answer query on %s\n", intn->name);
+ #endif /* ECMH_SUPPORT_MLD2 */
+@@ -1509,6 +1799,8 @@
+ 	struct grpintnode	*grpintn;
+ 	struct subscrnode	*subscrn;
+ 	struct listnode		*in, *in2;
++	time_t	time_tee;
++	int		i = 0;
+ 
+ 	/* 
+ 	 * Don't route multicast packets that:
+@@ -1580,7 +1872,7 @@
+ 			 * This is the case when an MLDv1 listener
+ 			 * is on the link too for example.
+ 			 */
+-			if (subscrn->mode != MLD2_MODE_IS_INCLUDE) continue;
++			if ((subscrn->mode == MLD2_CHANGE_TO_INCLUDE)||(subscrn->mode == MLD2_BLOCK_OLD_SOURCES))continue;
+ 
+ 			/* Get the interface */
+ 			interface = int_find(grpintn->ifindex);
+@@ -1733,7 +2025,6 @@
+ 	 */
+ 	if (!IN6_IS_ADDR_MULTICAST(&iph->ip6_dst))
+ 	{
+-		/* printf("Address is not multicast!\n"); */
+ 		return;
+ 	}
+ 
+@@ -2462,6 +2753,7 @@
+ 		if (intn->mtu == 0) continue;
+ 
+ 		mld_send_query(intn, &any, NULL, false);
++		mldv1_send_query(intn, &any, NULL, false);
+ 	}
+ 	dolog(LOG_DEBUG, "Sending MLD Queries - done\n");
+ }
+@@ -2489,7 +2781,9 @@
+ 	struct listnode		*gn, *gn2;
+ 	struct subscrnode	*subscrn;
+ 	struct listnode		*ssn, *ssn2;
+-	time_t			time_tee;
++	struct intnode 		*intn;
++	time_t	time_tee;
++	char	str[128] = {0};
+ 
+ 	dolog(LOG_DEBUG, "Timeout\n");
+ 
+@@ -2502,19 +2796,35 @@
+ 	/* Timeout all the groups that didn't refresh yet */
+ 	LIST_LOOP2(g_conf->groups, groupn, ln, ln2)
+ 	{
+-		//printf("Groups\n");
+ 		LIST_LOOP2(groupn->interfaces, grpintn, gn, gn2)
+ 		{
+-			//printf("Group Interfaces\n");
+ 			LIST_LOOP2(grpintn->subscriptions, subscrn, ssn, ssn2)
+ 			{
+ 				/* Calculate the difference */
+ 				int i = time_tee - subscrn->refreshtime;
+ 				if (i < 0) i = -i;
+ 
++				dolog(LOG_DEBUG, "use time %d s\n", i);
+ 				/* Dead too long? */
+-				if (i > (ECMH_SUBSCRIPTION_TIMEOUT * ECMH_ROBUSTNESS_FACTOR))
++				if (i > (ECMH_SUBSCRIPTION_TIMEOUT * (ECMH_ROBUSTNESS_FACTOR-1) + ECMH_RESPONSE_INTERVAL))
+ 				{
++					/*send report */
++					dolog(LOG_DEBUG, "del sub %d\n", subscrn->mode);
++					if(IN6_IS_ADDR_UNSPECIFIED(&subscrn->ipv6)) 
++						subscrn->mode = MLD2_CHANGE_TO_INCLUDE;
++					else
++						subscrn->mode = MLD2_BLOCK_OLD_SOURCES;
++
++					intn = int_find(g_conf->upstream_id);
++					if (intn)
++					{
++						if(true == groupn->ismldv1)
++							mld1_send_done(intn, &groupn->mca);
++						mld2_send_report(intn, &groupn->mca);
++					}
++					else
++						dolog(LOG_DEBUG, "can't find upstream_id\n");
++
+ 					/* Dead too long -> delete it */
+ 					list_delete_node(grpintn->subscriptions, ssn);
+ 					/* Destroy the subscription itself */
+@@ -2522,27 +2832,30 @@
+ 				}
+ 			}
+ 			LIST_LOOP2_END
+-#ifndef ECMH_SUPPORT_MLD2
+ 			if (grpintn->subscriptions->count == 0)
+-#else
+-			if (grpintn->subscriptions->count <= (-ECMH_ROBUSTNESS_FACTOR))
+-#endif
+ 			{
+ 				/* Delete from the list */
++				dolog(LOG_DEBUG, "del interface %d\n", groupn->interfaces);
+ 				list_delete_node(groupn->interfaces, gn);
+ 				/* Destroy the grpint */
+ 				grpint_destroy(grpintn);
+ 			}
++			else
++				dolog(LOG_DEBUG, "grp_sub_count is %d\n", grpintn->subscriptions->count );
+ 		}
+ 		LIST_LOOP2_END
+ 
+ 		if (groupn->interfaces->count == 0)
+ 		{
+ 			/* Delete from the list */
++			inet_ntop(AF_INET6, &groupn->mca, str, sizeof(str));
++			dolog(LOG_DEBUG, "del groups %s\n", str);
+ 			list_delete_node(g_conf->groups, ln);
+ 			/* Destroy the group */
+ 			group_destroy(groupn);
+ 		}
++		else
++			dolog(LOG_DEBUG, "grp_int_count is %d\n", groupn->interfaces->count);
+ 	}
+ 	LIST_LOOP2_END
+ 
+@@ -2560,17 +2873,32 @@
+ 
+ #ifndef ECMH_BPF
+ 	struct sockaddr_ll	sa;
+-	socklen_t		salen;
++	socklen_t	salen;
++	fd_set		fds;
+ 
+ 	salen = sizeof(sa);
+ 	memset(&sa, 0, sizeof(sa));
+-	len = recvfrom(g_conf->rawsocket, buffer, g_conf->bufferlen, 0, (struct sockaddr *)&sa, &salen);
++	FD_ZERO(&fds);
++	FD_SET(g_conf->rawsocket,&fds);
+ 
+-	if (len == -1)
++	if(0 >= select(1 + g_conf->rawsocket,&fds,NULL,NULL,NULL))
+ 	{
+-		dolog(LOG_ERR, "Couldn't Read from RAW Socket\n");
+-		return false;
++		dolog(LOG_DEBUG, "Error or timeout.\n");
++		return true;
++	}
++
++	if(FD_ISSET(g_conf->rawsocket,&fds)) 
++	{
++		len = recvfrom(g_conf->rawsocket, buffer, g_conf->bufferlen, 0, (struct sockaddr *)&sa, &salen);
++
++		if (len == -1)
++		{
++			dolog(LOG_ERR, "Couldn't Read from RAW Socket\n");
++			return false;
++		}
+ 	}
++	else
++		return true;
+ 
+ 	/*
+ 	 * Ignore:
+diff -uN ecmh_yu/src_o/ecmh.h ecmh-2005.02.09/src/ecmh.h
+--- ecmh_yu/src_o/ecmh.h	2012-07-13 10:17:33.778021000 +0800
++++ ecmh-2005.02.09/src/ecmh.h	2012-07-12 10:59:45.611805000 +0800
+@@ -129,7 +129,7 @@
+ 
+ /* Robustness Factor, per RFC3810 MLDv2 "9.1.  Robustness Variable" */
+ #define ECMH_ROBUSTNESS_FACTOR		2
+-
++#define ECMH_RESPONSE_INTERVAL 10
+ #include "linklist.h"
+ #include "common.h"
+ 
+diff -uN ecmh_yu/src_o/groups.c ecmh-2005.02.09/src/groups.c
+--- ecmh_yu/src_o/groups.c	2005-02-10 01:58:06.000000000 +0800
++++ ecmh-2005.02.09/src/groups.c	2012-07-12 10:59:45.612748000 +0800
+@@ -78,6 +78,7 @@
+ {
+ 	struct groupnode	*groupn;
+ 	struct grpintnode	*grpintn;
++	char str[128] = {0};
+ 
+ 	*isnew = false;
+ 
+@@ -86,6 +87,8 @@
+ 
+ 	if (!groupn)
+ 	{
++		inet_ntop(AF_INET6, mca, str, sizeof(str));
++		dolog(LOG_DEBUG, "create %s\n", str);
+ 		/* Create the group node */
+ 		groupn = group_create(mca);
+ 
+diff -uN ecmh_yu/src_o/groups.h ecmh-2005.02.09/src/groups.h
+--- ecmh_yu/src_o/groups.h	2005-02-10 01:58:06.000000000 +0800
++++ ecmh-2005.02.09/src/groups.h	2012-07-12 10:59:45.615972000 +0800
+@@ -16,6 +16,7 @@
+ 	time_t		lastforward;	/* The last time we forwarded a report for this group */
+ 	uint64_t	bytes;		/* Number of received bytes */
+ 	uint64_t	packets;	/* Number of received packets */
++	bool		ismldv1;
+ };
+ 
+ struct groupnode *group_create(const struct in6_addr *mca);
+diff -uN ecmh_yu/src_o/grpint.c ecmh-2005.02.09/src/grpint.c
+--- ecmh_yu/src_o/grpint.c	2005-02-10 01:58:06.000000000 +0800
++++ ecmh-2005.02.09/src/grpint.c	2012-07-12 10:59:45.616903000 +0800
+@@ -63,7 +63,7 @@
+ 	subscrn = subscr_find(grpintn->subscriptions, ipv6);
+ 
+ 	/* Exclude all ? -> Unsubscribe */
+-	if (	mode == MLD2_MODE_IS_EXCLUDE &&
++	if (	mode == MLD2_MODE_IS_INCLUDE &&
+ 		IN6_IS_ADDR_UNSPECIFIED(ipv6))
+ 	{
+ 		/*
+@@ -71,6 +71,7 @@
+ 		 * causing it to be removed later on
+ 		 * because of a timeout
+ 		 */
++		dolog(LOG_WARNING, "grpint_refresh() - Mode is %u and ipaddr unspecified\n", mode);
+ 		return true;
+ 	}
+ 

@@ -1,0 +1,11 @@
+--- ./systemv/cupsaccept.c~	2011-12-16 11:41:45.367738616 +0800
++++ ./systemv/cupsaccept.c	2011-12-16 11:41:53.691738218 +0800
+@@ -200,7 +200,7 @@ main(int  argc,				/* I - Number of comm
+       * Do the request and get back a response...
+       */
+ 
+-      ippDelete(cupsDoRequest(CUPS_HTTP_DEFAULT, request, "/admin/"));
++      ippDelete(cupsDoRequest(CUPS_HTTP_DEFAULT, request, "/"));
+ 
+       if (cupsLastError() > IPP_OK_CONFLICT)
+       {

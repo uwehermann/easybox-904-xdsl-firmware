@@ -1,0 +1,275 @@
+#!/bin/sh
+
+TD_EXTRA_FLAGS_FXO=
+TD_EXTRA_FLAGS_KPI2UDP=
+TD_EXTRA_FLAGS_DECT=
+TD_DOWNLOAD_PATH=/opt/ifx/downloads
+DEV_NODE_TERIDIAN=ter10
+
+MKNOD_OK=0
+INSMOD_OK=0
+ 
+# Show help
+help()
+{
+    echo "Usage:" 
+    echo " - $0 WAN-IF-NAME - start TAPIDEMO without FXO support"
+    echo " - $0 WAN-IF-NAME fxo - start TAPIDEMO with FXO support."
+    echo " - $0 WAN-IF-NAME dect - start TAPIDEMO with DECT support."
+    echo " - $0 WAN-IF-NAME fxo dect - start TAPIDEMO with FXO and DECT support."
+    echo " - $0 stop - stop TAPIDEMO"
+}
+
+# Detect platform based on information form /proc/cpuinfo
+detect_platform()
+{
+   use_platform=`cat /proc/cpuinfo | grep system | cut -f 3 -d ' '`
+   if test -z "$use_platform"; then
+      echo "ERROR: Can not detect platform. Please manual set platform."
+      echo "       Try $0 -h for more information."
+      exit 
+   fi
+   
+} # detect_platform
+
+# Check if device node for Teridian exists
+checkFxoSupport()
+{
+   if [ ! -e /dev/$DEV_NODE_TERIDIAN ];then
+      echo "FXO support is disabled. Can not find required driver's device node." 
+   else
+      TD_EXTRA_FLAGS_FXO="-x"
+   fi
+}
+
+# Check if module drv_kpi2udp is loaded 
+checkKpi2UdpSupport()
+{
+   tmp=`cat /proc/modules | grep 'drv_kpi2udp '`
+   if [ "$tmp" != "" ]; then
+      TD_EXTRA_FLAGS_KPI2UDP="-q"  
+   fi
+}
+
+# Init DECT drivers
+startDect()
+{
+   if [ ! -c "/dev/dect_drv" ]; then
+      /bin/mknod /dev/dect_drv c 213 0
+      if [ "$?" != "$MKNOD_OK" ]; then
+         return 1
+      fi
+   fi
+   if [ ! -c "/dev/timer_drv" ]; then
+      /bin/mknod /dev/timer_drv c 212 0
+      if [ "$?" != "$MKNOD_OK" ]; then
+         return 1
+      fi
+   fi
+   if [ ! -c "/dev/pb" ]; then
+      /bin/mknod /dev/pb c 150 0
+      if [ "$?" != "$MKNOD_OK" ]; then
+         return 1
+      fi
+   fi
+   if [ ! -c "/dev/amazon_s-port" ]; then
+      /bin/mknod /dev/amazon_s-port c 240 0
+      if [ "$?" != "$MKNOD_OK" ]; then
+         return 1
+      fi
+   fi
+
+   tmp=`cat /proc/modules | grep 'drv_timer '`
+   if [ "$tmp" = "" ]; then
+      insmod /usr/drivers/drv_timer.ko
+      if [ "$?" != "$INSMOD_OK" ]; then
+         return 1
+      fi
+   fi
+   tmp=`cat /proc/modules | grep 'cosic '`
+   if [ "$tmp" = "" ]; then
+      insmod /usr/drivers/drv_dect.ko
+      if [ "$?" != "$INSMOD_OK" ]; then
+         return 1
+      fi
+   fi
+   tmp=`cat /proc/modules | grep 'voip_timer_driver '`
+   if [ "$tmp" = "" ]; then
+#      insmod /lib/modules/voip_timer_driver
+      insmod /lib/modules/voip_timer_driver.ko
+      if [ "$?" != "$INSMOD_OK" ]; then
+         return 1
+      fi
+   fi
+   tmp=`cat /proc/modules | grep 'paging '`
+   if [ "$tmp" = "" ]; then
+      insmod /usr/drivers/paging.ko
+      if [ "$?" != "$INSMOD_OK" ]; then
+         return 1
+      fi
+   fi
+  
+   return 0
+}
+
+start()
+{
+   TD_WANIF=$1
+   
+   TD_WANIF_IP=`ifconfig $TD_WANIF | grep 'inet addr:' | cut -f2 -d: | cut -f1 -d' '`
+   if [ "$TD_WANIF_IP" = "" ]; then
+      echo "Error, getting IP address for network device $TD_WANIF failed."
+      exit 1
+   fi   
+
+   if [ "$#" = 0 ];then
+     echo "Error, too few parameter."
+     help
+     exit 1
+   elif [ "$#" = 1 ];then
+      # User don't use additionaly paramters
+      continue
+   elif [ "$#" = 2 ];then
+      if [ "$2" = "fxo" ];then
+        checkFxoSupport
+      elif [ "$2" = "dect" ];then
+	 TD_EXTRA_FLAGS_DECT="--dect"
+         startDect
+         if [ $? != "0" ]; then
+            echo "Init DECT drivers ... failed."
+            return 1;
+         else
+            echo -e "Init DECT drivers ... ok"
+         fi
+      else
+        echo "Error, unknown second parameter."
+        help
+        exit 1
+      fi
+   elif [ "$#" = 3 ];then
+      # Check second parametr
+      if [ "$2" = "fxo" ];then
+        checkFxoSupport
+      elif [ "$2" = "dect" ];then
+	 TD_EXTRA_FLAGS_DECT="--dect"
+         startDect
+         if [ $? != "0" ]; then
+            echo "Init DECT drivers ... failed."
+            return 1;
+         else
+            echo -e "Init DECT drivers ... ok"
+         fi
+      else
+        echo "Error, unknown second parameter."
+        help
+        exit 1
+      fi
+      # Check third parametr
+      if [ "$3" = "fxo" ];then
+        checkFxoSupport
+      elif [ "$3" = "dect" ];then
+	 TD_EXTRA_FLAGS_DECT="--dect"
+         startDect
+         if [ $? != "0" ]; then
+            echo "Init DECT drivers ... failed."
+            return 1;
+         else
+            echo -e "Init DECT drivers ... ok"
+         fi
+      else
+        echo "Error, unknown third parameter."
+        help
+        exit 1
+      fi
+   
+   else
+     echo "Error,too many parameter."
+     help
+     exit 1
+   fi
+   
+   checkKpi2UdpSupport
+
+   #workaround: tapidemo started with fxo but without dect
+	### ctc ###
+#   if test -z "$TD_EXTRA_FLAGS_DECT" && test -n "$TD_EXTRA_FLAGS_FXO"; then
+	###########
+      use_platform=
+      detect_platform
+      if [ "$use_platform" = "AR9" ];then 
+         echo "AR9 plaform detected. GPIO 22 (1.6) is set to low. "
+         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 1 --pin 6 --value 0 --func ALTSEL0
+         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 1 --pin 6 --value 0 --func ALTSEL1
+         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 1 --pin 6 --value 1 --func DIR
+         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 1 --pin 6 --value 0 --func OUTPUT
+      elif [ "$use_platform" = "VR9" ];then
+		echo "VR9 plaform detected.  GPIO 14 (0.14) is set to low. "
+		### ctc ###
+#         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 0 --pin 14 --value 0 --func ALTSEL0
+#         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 0 --pin 14 --value 0 --func ALTSEL1
+#         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 0 --pin 14 --value 1 --func DIR
+#         /opt/ifx/bin/gpio --dev /dev/amazon_s-port --port 0 --pin 14 --value 0 --func OUTPUT
+		# enable relay control
+#		(echo altsel0-clear 30 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+#		(echo altsel1-clear 30 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+#		(echo dir-out       30 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+#		(echo od-set        30 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+#		(echo dataout-clear 30 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+#		usleep 50000
+#		(echo dataout-set   30 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+#		usleep 50000
+		# reset SLIC
+		(echo altsel0-clear 37 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+		(echo altsel1-clear 37 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+		(echo dir-out       37 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+		(echo od-set        37 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+		(echo dataout-clear 37 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+		usleep 50000
+		(echo dataout-set   37 > /proc/driver/ifx_gpio/setup) 2>&- 1>&-
+		usleep 50000
+		echo mask_set 0x00 0x40 > /proc/driver/sipo
+		sleep 1
+		###########
+      else
+         echo "Error, Wrong platform - $use_platform."
+      fi
+	### ctc ###
+#   fi
+	###########
+   
+
+   #if [ -r /etc/rc.conf ]; then
+   #      . /etc/rc.conf
+   #fi
+
+   TD_DEBUG_LEVEL=$tapiDebugLevel
+   if [ "$TD_DEBUG_LEVEL" = "" ]; then
+      TD_DEBUG_LEVEL=3
+   fi
+   TD_DEBUG_LEVEL=1
+
+   /opt/ifx/bin/tapidemo -d $TD_DEBUG_LEVEL $TD_EXTRA_FLAGS_FXO \
+   $TD_EXTRA_FLAGS_KPI2UDP -i $TD_WANIF_IP -l $TD_DOWNLOAD_PATH \
+   $TD_EXTRA_FLAGS_DECT &
+}
+
+stop()
+{
+    killall tapidemo > /dev/null 2> /dev/null
+    
+    rmmod cosic
+    rmmod drv_timer
+    rmmod ifx_voip_timer_driver
+    rmmod danube_paging
+
+}
+
+case "$1" in
+   stop) 
+      stop
+      ;;
+   *)
+      start $1 $2 $3
+      ;;
+esac
+

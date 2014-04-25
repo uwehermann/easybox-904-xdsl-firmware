@@ -1,0 +1,5 @@
+DynDNS:
+	ez-ipupdate -S dyndns -u ammonc:ammonc1 -h ammonc.dyndns.org -i ppp0 -d
+
+TZO.com:
+	ez-ipupdate -S tzo -u ammonctc@yahoo.com.tw:K509331651981343 -h ammonc.tzo.net -i ppp0 -d

@@ -1,0 +1,305 @@
+#!/bin/sh
+# Copyright (C) 2009-2010 OpenWrt.org
+
+# echo hotplug mount - action ${ACTION} prod ${PRODUCT} type ${TYPE} intf ${INTERFACE} dev ${DEVICE} devFs ${DEVFS} > /dev/console
+# echo hotplug mount @${ACTION} @${SUBSYSTEM} @${PHYSDEVPATH} @${DEVPATH} @${MODALIAS} @${MAJOR} @${MINOR} @${DEVICENAME} > /dev/console
+
+
+DEBUG_LEVEL=0
+USB_ROOT_DIR=/tmp/usb
+DRVCFG_PROG="/usr/sbin/drivecfg.sh"
+PART_HEAD_DIR=/tmp/fs
+PART_HEAD_FILE=${PART_HEAD_DIR}/${DEVICENAME}
+Support_FS="FAT16 FAT32 NTFS EXT2 EXT3 EXT4 HFSPLUS XFS"
+
+# $1: dev
+# $2: dir
+mount_dev()
+{
+	local DEV_TYPE
+	local tmp
+	local byte1
+	local byte2
+	local byte3
+	local byte4
+
+	if [ -z $2 ] ; then
+		return 1
+	fi
+
+	RET=1
+
+	if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+		echo mount_dev ${1} ${2}
+	fi
+
+	mkdir -p $2 2>&1 > /dev/console
+
+	chmod 757 $2
+
+	chown root:readonly $2
+
+	head -c 1200 $1 > ${PART_HEAD_FILE}
+
+	/etc/init.d/samba stop
+	/etc/init.d/pure-ftpd stop
+
+# FAT16 & FAT32
+	if [ `hexdump -Cv -s 82 -n 5 ${PART_HEAD_FILE} | grep -c "|FAT32|"` -ge 1 ] ||
+	   [ `hexdump -Cv -s 54 -n 5 ${PART_HEAD_FILE} | grep -c "|FAT16|"` -ge 1 ] ||
+	   [ `hexdump -Cv -s 54 -n 5 ${PART_HEAD_FILE} | grep -c "|FAT12|"` -ge 1 ] ; then
+		DEV_TYPE="FAT"
+		if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+			echo $DEV_TYPE > /dev/console
+		fi
+		mount -t vfat -o gid=1005,rw,utf8,umask=020,flush ${1} ${2}
+		RET=0
+
+# NTFS
+	elif [ `hexdump -Cv -s 3 -n 4 ${PART_HEAD_FILE} | grep -c "|NTFS|"` -ge 1 ] ; then
+		DEV_TYPE="NTFS"
+		if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+			echo $DEV_TYPE > /dev/console
+		fi
+		ntfs-3g -o gid=1005,force,recover,nls=utf8,umask=020 ${1} ${2}
+		RET=0
+
+# EXT2 & EXT3
+	elif [ `hexdump -Cv -s 1080 -n 2 ${PART_HEAD_FILE} | grep -ci "53 ef"` -eq 1 ] || [ `hexdump -Cv -s 1080 -n 2 ${PART_HEAD_FILE} | grep -ci "51 ef"` -eq 1 ] ; then
+		# Maybe we can refine this part. ~Adley
+		tmp=`hexdump -Cv -s 1116 -n 1 ${PART_HEAD_FILE}`
+		tmp=${tmp#* }
+		tmp=${tmp%% |*}
+		tmp=${tmp#?}
+		tmp=${tmp#?}
+		if [ `echo $tmp | grep -ci [012389ab]` -eq 1 ] ; then
+			DEV_TYPE="EXT2"
+			if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+				echo $DEV_TYPE  > /dev/console
+			fi
+			mount -t ext2 ${1} ${2}
+			RET=0
+		fi
+		tmp=`hexdump -Cv -s 1124 -n 4 ${PART_HEAD_FILE}`
+		tmp=${tmp#* }
+		tmp=${tmp%%|*}
+		tmp=${tmp# }
+		num=1
+		for i in $tmp
+		do
+			if [ $num -eq 1 ] ; then
+				byte1=$i
+			elif [ $num -eq 2 ] ; then
+				byte2=$i
+			elif [ $num -eq 3 ] ; then
+				byte3=$i
+			elif [ $num -eq 4 ] ; then
+				byte4=$i
+			fi
+			let num=$num+1
+		done
+		if [ "$DEV_TYPE" != "EXT2" ] ; then
+			if [ "$byte4" = "00" ] && [ "$byte3" = "00" ] && [ "$byte2" = "00" ] && [ $byte1 -lt 8 ] ; then
+				DEV_TYPE="EXT3"
+				if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+					echo $DEV_TYPE > /dev/console
+				fi
+				mount -t ext3 ${1} ${2}
+				RET=0
+			elif [ `hexdump -Cv -s 1292 -n 2 /dev/${DEVICENAME} | grep -ci "0a f3"` -eq 1 ] ; then
+				DEV_TYPE="EXT4"
+				if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+					echo $DEV_TYPE > /dev/console
+				fi
+				mount -t ext4 ${1} ${2}
+				RET=0
+			fi
+		fi
+
+		chown root:readonly $2
+		chmod 757 $2
+
+# HFSPLUS, failed to support
+#	elif [ `hexdump -Cv -s 1024 -n 2 ${1} | grep -ci "48 2b"` -eq 1 ] ; then
+#		DEV_TYPE="HFSPLUS"
+#		if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+#			echo $DEV_TYPE > /dev/console
+#		fi
+#		mount -t hfsplus ${1} ${2}
+#		RET=0
+
+# XFS
+#	elif [ `hexdump -Cv -n 4 ${PART_HEAD_FILE} | grep -c "58 46 53 42"` -eq 1 ] ; then
+#		DEV_TYPE="XFS"
+#		if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+#			echo $DEV_TYPE > /dev/console
+#		fi
+#		mount -t xfs ${1} ${2}
+#
+#		chown root:readonly $2
+#		chmod 757 $2
+#
+#		RET=0
+
+# MAC format
+#	elif [ `hexdump -Cv -n 8 ${PART_HEAD_FILE} | grep -ci "X.BSD"` -eq 1 ] ; then
+#		if [ `hexdump -Cv -s 80 -n 10 ${PART_HEAD_FILE} | grep -ci "FAT"` -eq 1 ] ; then
+#			DEV_TYPE="FAT"
+#			if [ ${DEBUG_LEVEL} -gt 1 ] ; then
+#				echo $DEV_TYPE > /dev/console
+#			fi
+#			mount -t vfat ${1} ${2} -o gid=1005,utf8,umask=020
+#			RET=0
+#		fi
+
+	else # try to mount
+#		mount ${1} ${2} -o utf8
+		echo -n
+
+	fi
+
+	if [ $RET != 0 ] ; then
+		echo unknown partition $1 > /dev/console
+		if [ -n "${DEVICENAME:3}" ] || [ -z "`ls /dev/${DEVICENAME}? 2>&-`" ] ; then
+			rmdir $2
+		fi
+		return 1
+	fi
+
+	sleep 2
+
+	lock /tmp/block_mount.lock
+
+	CNT=`ps | grep "/sbin/hotplug-call block" | grep -c -v grep`
+	if [ $CNT -le 2 ] ; then # the last mount, 2 is due to ps or grep
+
+		/etc/init.d/dropbear usb_start
+
+		disklabel > /tmp/fs/disklabel
+		diskinfo_brn.sh
+		volinfo_brn.sh
+		$DRVCFG_PROG sync
+
+		if [ "`ccfg_cli get web_upnp_av@DLNAS`" == "1" ] ; then
+			/usr/sbin/twonky_database_set.sh "mount" "${DEVICENAME}" &
+            sleep 1
+			/usr/sbin/dlna_share_folder_set.sh dlna_share_folder_add &
+        fi
+
+		if [ "`ccfg_cli get enable@samba`" == "1" ] ; then
+			/usr/sbin/sambacfg.sh smb_user_cfg_set
+			/etc/init.d/samba start
+		fi
+
+		if [ "`ccfg_cli get enable@webdav`" == "1" ] ; then
+			/etc/init.d/webdav restart
+			#/usr/sbin/webdav_start webdav_default_folder_set 1 &
+		fi
+
+		/usr/sbin/libmapi_event_cli add hotplug USB "Storage in"
+
+		( sleep 2 ; /etc/init.d/task_prio.sh check )&
+	fi
+
+	lock -u /tmp/block_mount.lock
+
+	return 0
+}
+
+# $1: devname
+# $2: rmdir
+# $3: rm
+umount_dev()
+{
+
+	# move umount to 'arcusb_notifier.sh umount sdXN', because this timing is too late.
+	#/etc/init.d/samba stop
+	#/etc/init.d/pure-ftpd stop
+	#/etc/init.d/twonkyserver stop
+	#CNT=0
+	#while [ $CNT -le 5 ] ; do
+	#	umount -l /dev/$1 2>&1 > /dev/console
+	#	if [ $? == 0 ] ; then
+	#		break
+	#	fi
+	#	sleep 1
+	#	let CNT=$CNT+1
+	#done
+	#sleep 2
+
+	if [ -n "$2" ] ; then
+		rmdir $2 2>&1 > /dev/console
+	fi
+
+	lock /tmp/block_mount.lock
+
+	if [ -n "$3" ] ; then
+		rm $3 2>&1 > /dev/console
+	fi
+
+	CNT=`ps | grep "/sbin/hotplug-call block" | grep -c -v grep`
+	if [ $CNT -le 2 ] ; then # the last mount, 2 is due to ps or grep
+		disklabel > /tmp/fs/disklabel
+		diskinfo_brn.sh
+		volinfo_brn.sh
+		$DRVCFG_PROG sync
+
+		if [ "`ccfg_cli get web_upnp_av@DLNAS`" == "1" ] ; then
+            sleep 1
+			/usr/sbin/dlna_share_folder_set.sh dlna_default_folder_set 1 &
+        fi
+
+		if [ "`ccfg_cli get enable@samba`" == "1" ] ; then
+			/usr/sbin/sambacfg.sh smb_user_cfg_set
+			/etc/init.d/samba start
+		fi
+
+		if [ "`ccfg_cli get enable@ftpdef`" == "1" ] ; then
+			/usr/sbin/ftp_folder_set.sh ftp_default_folder_set 1 &
+		fi
+
+		if [ "`ccfg_cli get enable@webdav`" == "1" ] ; then
+			/etc/init.d/webdav restart
+			#/usr/sbin/webdav_start webdav_default_folder_set 1 &
+		fi
+
+		/usr/sbin/libmapi_event_cli add hotplug USB "Storage out"
+	fi
+
+	lock -u /tmp/block_mount.lock
+}
+
+
+
+mkdir -p ${PART_HEAD_DIR}
+
+
+case "$ACTION" in
+	add)
+		if [ "${DEVICENAME:0:2}" == "sd" ] && [ -n "${DEVICENAME:3}" ] && [ `cat /sys${DEVPATH}/size` -gt 8 ] ; then
+			mount_dev /dev/${DEVICENAME} ${USB_ROOT_DIR}/${DEVICENAME:2} 2>&1 > /dev/console &
+#			if [ ! -e "/tmp/samba_timestamp" ] ; then
+#				touch /tmp/samba_timestamp
+#				samba_update.sh &
+#			fi
+		elif [ "${DEVICENAME:0:2}" == "sd" ] && [ -z "${DEVICENAME:3}" ] && [ `cat /sys${DEVPATH}/size` -gt 8 ] ; then
+			if [ -z "`ls /dev/${DEVICENAME}? 2>&-`" ] ; then
+				mkdir -p ${USB_ROOT_DIR}/${DEVICENAME:2}1 2>&1 > /dev/console
+				mount_dev /dev/${DEVICENAME} ${USB_ROOT_DIR}/${DEVICENAME:2}1 2>&1 > /dev/console &
+			fi
+		fi
+		;;
+	remove)
+		if [ "${DEVICENAME:0:2}" == "sd" ] && [ -n "${DEVICENAME:3}" ] ; then
+			umount_dev $DEVICENAME ${USB_ROOT_DIR}/${DEVICENAME:2} /dev/${DEVICENAME} &
+#			if [ ! -e "/tmp/samba_timestamp" ] ; then
+#				touch /tmp/samba_timestamp
+#				samba_update.sh &
+#			fi
+		elif [ "${DEVICENAME:0:2}" == "sd" ] && [ -z "${DEVICENAME:3}" ] ; then
+			umount_dev $DEVICENAME ${USB_ROOT_DIR}/${DEVICENAME:2}1 /dev/${DEVICENAME}* &
+			lock -u /tmp/block_mount.lock # double unlock
+		fi
+		;;
+esac
+

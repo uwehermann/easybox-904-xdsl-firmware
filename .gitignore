@@ -1,0 +1,85 @@
+#
+# NOTE! Don't add files that are generated in specific
+# subdirectories here. Add them in the ".gitignore" file
+# in that subdirectory instead.
+#
+# NOTE! Please use 'git-ls-files -i --exclude-standard'
+# command after changing this file, to see if there are
+# any tracked files which get ignored after the change.
+#
+# Normal rules
+#
+
+
+#
+# Top-level generic files
+#
+/dl
+/.config*
+/bin
+/build_dir
+/staging_dir
+/tmp
+/logs
+/feeds
+/feeds.conf
+/files
+#/package/feeds
+#/package/openwrt-packages
+package/arcadyan-utility/httpd-brn/httpd-brn-voda/904stringIDParseTool
+/*.o
+/*.cmd
+/.cvs*
+/.svn*
+
+/ifx.image
+/.git_old
+
+#/00infineon223w8
+/arcadyan-docs
+#/0-*.sh
+/.project*
+
+.*~
+
+#
+# Generated files or directories
+#
+target/linux/ltqcpe/image/signImage.sh
+target/linux/ltqcpe/image/vf904Cert.pem
+target/linux/ltqcpe/image/vf904Key.pem
+target/linux/ltqcpe/image/vf904Pub.pem
+target/linux/ltqcpe/image/Makefile
+target/linux/ltqcpe/platform_vr9/config-2.6.32
+target/linux/ltqcpe/platform_vr9/config-2.6.32.ifxusb
+linux/linux-2.6.32.32/arch/mips/infineon/vr9/vr9_ref_board.c
+linux/linux-2.6.32.32/drivers/char/ifxmips_gpio.c
+linux/linux-2.6.32.32/drivers/net/Kconfig
+linux/linux-2.6.32.32/drivers/net/Kconfig.rtl
+linux/linux-2.6.32.32/drivers/net/Makefile
+linux/linux-2.6.32.32/drivers/net/rtl8367_switch_api/Makefile
+linux/linux-2.6.32.32/drivers/net/rtl8367_switch_api/smi.c
+linux/linux-2.6.32.32/drivers/net/Kconfig.rtl
+linux/linux-2.6.32.32/drivers/net/ifxmips_ppa/platform/vr9/pktcap.c
+linux/linux-2.6.32.32/net/ipv4/igmp.c
+linux/linux-2.6.32.32/net/ipv4/ipmr.c
+linux/linux-2.6.32.32/drivers/pci/pcie/Kconfig.ifx
+linux/linux-2.6.32.32/include/asm-mips/ifx/vr9/vr9_ref_board.h
+linux/linux-2.6.32.32/include/net/addrconf.h
+linux/linux-2.6.32.32/net/ipv6/addrconf.c
+linux/linux-2.6.32.32/net/ipv6/ndisc.c
+linux/linux-2.6.32.32/drivers/net/ipv4/
+linux/linux-2.6.32.32/drivers/mtd/mtdpart.c
+linux/linux-2.6.32.32/drivers/mtd/nand/ifxmips_mtd_nand.c
+linux/linux-2.6.32.32/drivers/net/ifxmips_ppa/platform/vr9/a5/ifxmips_ppa_datapath_vr9_a5.c
+linux/linux-2.6.32.32/drivers/net/ifxmips_ppa/platform/vr9/d5/ifxmips_ppa_datapath_vr9_d5.c
+linux/linux-2.6.32.32/drivers/net/ifxmips_ppa/platform/vr9/e5/ifxmips_ppa_datapath_vr9_e5.c
+linux/linux-2.6.32.32/drivers/net/ifxmips_ppa/platform/vr9/vr9/
+linux/linux-2.6.32.32/drivers/net/rtl8367_switch_api/
+linux/linux-2.6.32.32/include/rtl8367_switch_api/
+linux/linux-2.6.32.32/include/switch_api/
+linux/linux-2.6.32.32/net/bridge/br_mcast_snooping.c
+
+# quilt's files
+#patches
+series

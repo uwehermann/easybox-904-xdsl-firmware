@@ -1,0 +1,273 @@
+diff -ruPN org-files/net/ipv4/ip_forward.c mod-files/net/ipv4/ip_forward.c
+--- org-files/net/ipv4/ip_forward.c	2010-03-15 21:22:04.000000000 +0530
++++ mod-files/net/ipv4/ip_forward.c	2010-08-07 17:09:48.000000000 +0530
+@@ -37,6 +37,65 @@
+ #include <linux/route.h>
+ #include <net/route.h>
+ #include <net/xfrm.h>
++/*xav */
++static int is_device_name_softwire(struct sk_buff *skb);
++
++/* for is_device_name_softwire function */
++ static  int GlobalSoftWireMTU = 1300;
++ int SoftWireToggle = 0; /* SoftWireToggle =1 enabled Phase 1- fragmentation step 3*/
++ int overridesmtu =0; /* Use default as original values*/
++ static char softwire_device_name[20]="softwire";
++ 
++ int l2tpoverridesmtu =0;
++ int l2tpsmtu =1300;
++ 
++void SetSoftWireGloball2tpMTU(int SoftPMTU)
++{
++	l2tpsmtu = SoftPMTU;
++}
++EXPORT_SYMBOL(SetSoftWireGloball2tpMTU);
++
++void Setl2tpOverridesmtu(int localoverridesmtu)
++{
++	l2tpoverridesmtu = localoverridesmtu;
++}
++EXPORT_SYMBOL(Setl2tpOverridesmtu);
++
++ void SetSoftWireGlobalMTU(int SoftPMTU)
++{
++	/*
++	  This function is called by the ip6_tunnel.c to set the pathmtu
++	  no checks are done at this end bcos its assumed that the source setting this pathmtu is
++	  doing this checks by itself before it writes to this function
++	*/
++	GlobalSoftWireMTU = SoftPMTU;
++}
++EXPORT_SYMBOL(SetSoftWireGlobalMTU);
++
++
++void SetSoftwireDeviceName(char array[])
++{
++	strcpy(softwire_device_name, array);
++}
++EXPORT_SYMBOL(SetSoftwireDeviceName);
++
++void SetSoftWireToggle(int toggle)
++{
++	/*
++	  This function is called by the ip6_tunnel.c to set the SoftwireToggle
++	*/
++	SoftWireToggle = toggle;
++}
++EXPORT_SYMBOL(SetSoftWireToggle);
++
++void SetOverridesmtu(int localoverridesmtu)
++{
++	/*
++	  This function is called by the ip6_tunnel.c to set the SoftwireToggle
++	*/
++	overridesmtu = localoverridesmtu;
++}
++EXPORT_SYMBOL(SetOverridesmtu);
+ 
+ static int ip_forward_finish(struct sk_buff *skb)
+ {
+@@ -56,6 +115,14 @@
+ 	struct rtable *rt;	/* Route we use */
+ 	struct ip_options * opt	= &(IPCB(skb)->opt);
+ 
++	//Moh added lines below
++	int local_mtu;
++	struct udphdr *testudpheader;
++	int flag =0;	
++	testudpheader = udp_hdr(skb);
++	// Moh lines end here
++
++
+ 	if (skb_warn_if_lro(skb))
+ 		goto drop;
+ 
+@@ -86,13 +153,56 @@
+ 	if (opt->is_strictroute && rt->rt_dst != rt->rt_gateway)
+ 		goto sr_failed;
+ 
+-	if (unlikely(skb->len > dst_mtu(&rt->u.dst) && !skb_is_gso(skb) &&
++	/*xav check if the device is softwire ( dslite) */
++	 if(is_device_name_softwire(skb) )
++     {				
++		if (unlikely(overridesmtu ==1 ))   //IPIP only
++			local_mtu = GlobalSoftWireMTU;
++		else
++			local_mtu = dst_mtu(&rt->u.dst); 
++				
++		if(unlikely((skb->len > local_mtu) && (ip_hdr(skb)->frag_off & htons(IP_DF)) && (!skb->local_df ) ))
++		{
++		  if (unlikely(SoftWireToggle ==1)) 
++		    {
++			    //IP_INC_STATS(IPSTATS_MIB_FRAGFAILS);
++			   IP_INC_STATS(dev_net(rt->u.dst.dev), IPSTATS_MIB_FRAGFAILS); // for 2.6.30.10 compatibitlity
++			   icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
++			   htonl(local_mtu));
++	    	    }
++		  else 
++		   {
++			   //IP_INC_STATS(IPSTATS_MIB_FRAGFAILS);
++			   IP_INC_STATS(dev_net(rt->u.dst.dev), IPSTATS_MIB_FRAGFAILS); // for 2.6.30.10 compatibitlity
++			   icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
++			   htonl(local_mtu));
++		       goto drop;
++			
++		  } 
++	  }
++     }	/*not softwire or dslite*/
++   else
++   {
++	 /*  normal execution path not softwire */
++	 if (unlikely(skb->len > dst_mtu(&rt->u.dst) && !skb_is_gso(skb) &&
++		     (ip_hdr(skb)->frag_off & htons(IP_DF))) && !skb->local_df) 
++	 {
++		//IP_INC_STATS(IPSTATS_MIB_FRAGFAILS);
++		IP_INC_STATS(dev_net(rt->u.dst.dev), IPSTATS_MIB_FRAGFAILS); // for 2.6.30.10 compatibitlity
++		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
++			  htonl(dst_mtu(&rt->u.dst)));
++		goto drop;
++	}   
++	   
++   }
++
++/*	if (unlikely(skb->len > dst_mtu(&rt->u.dst) && !skb_is_gso(skb) &&
+ 		     (ip_hdr(skb)->frag_off & htons(IP_DF))) && !skb->local_df) {
+ 		IP_INC_STATS(dev_net(rt->u.dst.dev), IPSTATS_MIB_FRAGFAILS);
+ 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
+ 			  htonl(dst_mtu(&rt->u.dst)));
+ 		goto drop;
+-	}
++	} */
+ 
+ 	/* We are about to mangle packet. Copy it! */
+ 	if (skb_cow(skb, LL_RESERVED_SPACE(rt->u.dst.dev)+rt->u.dst.header_len))
+@@ -129,3 +239,22 @@
+ 	kfree_skb(skb);
+ 	return NET_RX_DROP;
+ }
++
++static int is_device_name_softwire(struct sk_buff *skb)
++{
++	//struct dst_entry *dst = skb->dst;
++	//struct net_device *dev = dst->dev;  
++	
++	struct net_device *dev = skb_dst(skb)->dev;
++	//if(strcmp(dev->name,softwire_device_name) == 0)
++	if(strstr (dev->name,softwire_device_name))
++    {
++		return 1;
++		
++    }
++    else
++    {
++		return 0;
++		
++    }
++}
+diff -ruPN org-files/net/ipv4/ip_output.c mod-files/net/ipv4/ip_output.c
+--- org-files/net/ipv4/ip_output.c	2010-03-15 21:22:04.000000000 +0530
++++ mod-files/net/ipv4/ip_output.c	2010-08-06 19:29:24.000000000 +0530
+@@ -82,6 +82,42 @@
+ 
+ int sysctl_ip_default_ttl __read_mostly = IPDEFTTL;
+ 
++/*xav */
++static int is_device_name_softwire(struct sk_buff *skb);
++static char softwire_device_name[20]="softwire";
++ //extern int GlobalSoftWireMTU ; no longer needed redundant
++ extern int l2tpoverridesmtu;
++ extern int l2tpsmtu;
++ /*moh ends */
++
++
++// moh
++static int is_device_name_softwire(struct sk_buff *skb)
++{
++	//struct dst_entry *dst = skb->dst;
++	struct net_device *dev = skb_dst(skb)->dev;
++   
++	
++	//if(strcmp(dev->name,softwire_device_name) == 0)
++	if(strstr (dev->name,softwire_device_name))
++    {
++		//printk("\n ip_output.c softwire found");
++         return 1;
++    }
++    else
++    {
++		//printk("\n ip_output.c dev->name =%s  softwire_device_name = %s", dev->name, softwire_device_name);
++        return 0;
++    }
++}
++void SetSoftwireDeviceName2(char array[])
++{
++	strcpy(softwire_device_name, array);
++}
++
++EXPORT_SYMBOL(SetSoftwireDeviceName2);
++// moh
++
+ /* Generate a checksum for an outgoing IP datagram. */
+ __inline__ void ip_send_check(struct iphdr *iph)
+ {
+@@ -222,6 +258,15 @@
+ 
+ static int ip_finish_output(struct sk_buff *skb)
+ {
++   //Moh added lines below
++	struct udphdr *testudpheader;
++	int flag =0;	
++	
++	unsigned  int localmtu;
++	
++	testudpheader = udp_hdr(skb);
++   // Moh lines end here
++
+ #if defined(CONFIG_NETFILTER) && defined(CONFIG_XFRM)
+ 	/* Policy lookup after SNAT yielded a new policy */
+ 	if (skb_dst(skb)->xfrm != NULL) {
+@@ -229,10 +274,43 @@
+ 		return dst_output(skb);
+ 	}
+ #endif
+-	if (skb->len > ip_skb_dst_mtu(skb) && !skb_is_gso(skb))
++
++  if(is_device_name_softwire(skb))  //IPIP tunneling only
++ {  
++	 skb->isthissoftwire[0]='a';
++	 skb->isthissoftwire[1]='b';
++	 skb->isthissoftwire[2]='c';
++	 skb->local_df =1;
++	 
++
++	 return ip_finish_output2(skb);
++	 
++ } 
++   else //non IPIP6 packet 
++  { 
++  
++	  if ((l2tpoverridesmtu==1) && (flag==2) )
++    {
++		localmtu = l2tpsmtu; //Softwire l2tp traffic only	 
++    } 
++	else
++	{
++		//normal traffic
++		localmtu = ip_skb_dst_mtu(skb);
++	}
++	  
++	if (skb->len > localmtu && !skb_is_gso(skb))
+ 		return ip_fragment(skb, ip_finish_output2);
+ 	else
++	  {  
+ 		return ip_finish_output2(skb);
++
++	 }
++ }
++	/*if (skb->len > ip_skb_dst_mtu(skb) && !skb_is_gso(skb))
++		return ip_fragment(skb, ip_finish_output2);
++	else
++		return ip_finish_output2(skb); */
+ }
+ 
+ int ip_mc_output(struct sk_buff *skb)

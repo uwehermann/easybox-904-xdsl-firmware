@@ -1,0 +1,95 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+run_scripts() {
+
+	### ctc ###
+	if [ `/bin/grep -c -i boothalt /proc/cmdline` -ge 1 ] ; then
+		exit
+	fi
+	
+	if [ `cat /etc/config/no_con_output.txt` == "1" ] ; then
+		CONSOLE=`uboot_env --get --name console`
+		if [ "$CONSOLE" == "ttyS0" ] ; then
+			uboot_env --set --name console --value '' > /dev/null
+			/sbin/reboot
+		fi
+                rm -f /dev/kmsg
+                mknod /dev/kmsg c 1 3
+                rm -f /dev/console
+                mknod /dev/console c 1 3
+	fi
+	if [ `cat /etc/config/no_con_output.txt` == "0" ] ; then
+		CONSOLE=`uboot_env --get --name console`
+		if [ "$CONSOLE" == "" ] ; then
+			uboot_env --set --name console --value 'ttyS0' > /dev/null
+			/sbin/reboot
+		fi
+	fi
+
+
+	LOG=`uboot_env --get --name log2file`
+	DEBUG=`/bin/grep -c -i debug /proc/cmdline`
+	if [ $LOG == "1" ] ; then
+		mkdir /tmp/consolelog
+		dmesg > /tmp/consolelog/console.log.`cut -d '.' -f 1 /proc/uptime`
+		cat /proc/kmsg > /tmp/consolelog/console.log &
+		echo 50  > printk_ratelimit
+		echo 100 > printk_ratelimit_burst
+		mknod /dev/console2 c 5 1
+		rm -f /dev/console
+		mknod /dev/console c 1 11
+		exec >& /dev/kmsg
+	elif [ $DEBUG -ge 1 ] ; then
+		exec >& /dev/console
+	fi
+
+	BOOT=`uboot_env --get --name bootstop`
+	if [ "$BOOT" == "" ] ; then
+		BOOT=Szz
+	fi
+	###########
+
+	for i in /etc/rc.d/$1*; do
+		### ctc ###
+		if [ "${i:10:3}" \> "$BOOT" ] ; then
+			continue
+		fi
+		###########
+		[ -x $i ] && $i $2 2>&1
+	done | $LOGGER
+}
+
+# bitonic update
+# touch /tmp/booting file to inform other process that system is booting now.
+# this /tmp/booting file will be removed on postinit.
+touch /tmp/booting
+
+# Set for Dumpping core file
+mkdir -p /tmp/core-files
+chmod 777 /tmp/core-files
+echo "/tmp/core-files/core.%e.%p.%t" > /proc/sys/kernel/core_pattern
+ulimit -S -c unlimited
+
+# Force to use IGMPv2
+echo "2" > /proc/sys/net/ipv4/conf/all/force_igmp_version
+
+### ctc ###
+if [ -d /opt/lantiq/bin ] ; then
+	export PATH=$PATH:/tmp/opt/lantiq/bin:/opt/lantiq/bin
+fi
+
+if [ -e /etc/init.d/rcS.ifx ] ; then
+	/etc/init.d/rcS.ifx
+fi
+###########
+
+
+LOGGER="cat"
+[ -x /usr/bin/logger ] && LOGGER="logger -s -p 6 -t sysinit"
+
+if [ "$1" = "S" ]; then
+	run_scripts "$1" "$2" &
+else
+	run_scripts "$1" "$2"
+fi

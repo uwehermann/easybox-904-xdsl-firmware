@@ -1,0 +1,25 @@
+#!/bin/sh /etc/rc.common
+
+START=50
+
+# Birdloop is used to restart BIRD if it crashed. Unfortunately, it also
+# hides and handles in the same manner start-time errors (like parse error
+# in config file). Therefore, it is not used by default. If you want to
+# use it, comment the first line and uncomment the second line in start().
+
+start() {
+	if ! [ -e /etc/config/bird4.conf ] ; then
+		$(CP) /etc/bird4.conf.dft /etc/config/bird4.conf
+	fi
+	/usr/sbin/bird4 -c /etc/config/bird4.conf
+#	/usr/sbin/bird4loop
+}
+
+stop() {
+	killall bird4
+	sleep 1
+}
+
+reload() {
+	killall -HUP bird4
+}

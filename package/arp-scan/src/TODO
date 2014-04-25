@@ -1,0 +1,41 @@
+$Id: TODO 13738 2008-07-24 19:02:48Z rsh $
+
+Code tidy up: reduce the number of global variables.
+
+Additional ARP fingerprinting options, e.g. arpsha != srcaddr.
+
+Some OSes, e.g. OpenBSD and NetBSD, don't run man pages through tbl.
+There is disagreement about what the first line in the manpage should be.
+Solaris 9 says in man(1):
+'\" X
+Linux sarge says in groff_man(7):
+.\" word
+In all cases, the letters in word are "e" for eqn, "r" for refer, "t" for tbl.
+
+Why does darwin 7.9 not have prototypes for pcap_datalink_val_to_name(),
+pcap_datalink_val_to_description() and pcap_setnonblock() even though the
+pcap library contains these functions?  arp-scan compiles with warnings, but
+runs OK.
+
+Add support for win32 link-layer send and receive.
+
+Alter the shebang line for the Perl scripts if /usr/bin/perl doesn't exist,
+but there is a Perl in one of the other standard locations.  This is mainly
+for NetBSD where pkg_add installs Perl as /usr/pkg/bin/perl and doesn't
+make /usr/bin/perl a symlink to this.
+
+Add support for Token Ring.
+
+Support the libpcap sending function pcap_sendpacket() or pcap_inject() when
+they are supported by the pcap library.  These two functions are essentially
+the same, but pcap_sendpacket() came from WinPcap whereas pcap_inject() came
+from OpenBSD.
+
+Use pcap_get_selectable_fd() to get the file descriptor for select().  This
+function is not supported on windows.
+
+Investigate response packets >60 bytes long, e.g:
+10:27:40.710842 00:11:43:0f:f2:dd > 00:c0:9f:09:b8:db, ethertype ARP (0x0806), length 106: arp reply server4.nta-monitor.ad.nta-monitor.com is-at 00:11:43:0f:f2:dd
+10:27:40.802358 00:06:d7:55:0f:40 > 00:c0:9f:09:b8:db, ethertype ARP (0x0806), length 64: arp reply maple.nta-monitor.com is-at 00:06:d7:55:0f:40
+
+Review verbose levels, and what gets displayed.

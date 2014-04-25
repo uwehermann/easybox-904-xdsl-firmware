@@ -1,0 +1,13 @@
+#
+[WaitForConfiguration]={
+mfcs 2 0
+}
+
+[WaitForLinkActivate]={
+}
+
+[WaitForRestart]={
+}
+
+[Common]={
+}

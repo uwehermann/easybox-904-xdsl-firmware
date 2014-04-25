@@ -1,0 +1,12 @@
+--- a/src/rfc2131.c
++++ b/src/rfc2131.c
+@@ -1332,7 +1332,8 @@ size_t dhcp_reply(struct dhcp_context *c
+ 	    time = 0xffffffff;
+ 	  else
+ 	    time = (unsigned int)difftime(lease->expires, now);
+-	  option_put(mess, end, OPTION_LEASE_TIME, 4, time);
++	  //option_put(mess, end, OPTION_LEASE_TIME, 4, time);
++
+ 	  lease_set_interface(lease, int_index);
+ 	}
+ 

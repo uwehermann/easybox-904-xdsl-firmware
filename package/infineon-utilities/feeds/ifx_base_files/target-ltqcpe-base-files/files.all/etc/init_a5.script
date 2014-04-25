@@ -1,0 +1,30 @@
+# WAN Configuration
+section wan
+ip-header-check enable
+tcp-udp-header-check enable
+drop-on-error disable
+unicast-drop-on-miss disable
+multicast-drop-on-miss disable
+max-unicast-sessions 192
+#interface nas0
+end
+
+# LAN Configuration
+section lan
+ip-header-check enable
+tcp-udp-header-check enable
+drop-on-error disable
+unicast-drop-on-miss disable
+multicast-drop-on-miss disable
+max-unicast-sessions 192
+#interface eth0
+#interface eth1
+#interface br0
+end
+
+max-multicast-sessions 64
+tcp-threshold 2
+udp-threshold 1
+
+max-bridging-sessions 512
+

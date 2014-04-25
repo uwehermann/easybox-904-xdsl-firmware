@@ -1,0 +1,56 @@
+
+# START=99
+
+RIPD_CONF_TEMPLATE=/etc/config/ripd.conf
+RIPD_CONF=/tmp/ripd.conf
+
+start()
+{
+	stop
+
+	if [ "`umngcli get enable@ripd`" != "1" ] ; then
+		return 0
+	fi
+
+	ripd -d -f $RIPD_CONF
+}
+
+stop()
+{
+	pkill ripd
+}
+
+boot()
+{
+	SECT=$1
+
+	if [ -z "$SECT" ] ; then
+		return 0
+	fi
+
+	proto=`umngcli get proto@${SECT}`
+	if [ "$proto" == "pppoe" ] || [ "$proto" == "pppoa" ] ; then
+		IFNAME=ppp$(( 1${SECT:3:3} - 1000 ))
+	else
+		IFNAME=`umngcli get ifname@${SECT}`
+	fi
+	if [ -z "$IFNAME" ] ; then
+		return 0
+	fi
+
+	sed s/"@WANIF@"/"${IFNAME}"/ $RIPD_CONF_TEMPLATE > $RIPD_CONF
+
+	start
+}
+
+
+case "$1" in
+	"boot")		boot $2	;;
+	"start")	start 	;;
+	"stop")		stop	;;
+	*)
+				echo $0 'boot <sect> - setup and start RIP daemon on network section <sect>'
+				echo $0 'start       - start RIP daemon'
+				echo $0 'stop        - stop RIP daemon'
+				;;
+esac

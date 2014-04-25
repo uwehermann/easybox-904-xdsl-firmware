@@ -1,0 +1,85 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+START=40
+### ctc ###
+#STOP=90
+###########
+
+include() {
+	local file
+
+	for file in $(ls $1/*.sh 2>/dev/null); do
+		. $file
+	done
+}
+
+boot() {
+	setup_switch() { return 0; }
+
+	include /lib/network
+	setup_switch
+	### ctc ###
+	ifup2 -a
+	/usr/sbin/setup_netdev.sh port-disable
+	/usr/sbin/setup_netdev.sh system
+#	grep -qs config /etc/config/wireless && {
+#		/sbin/wifi up
+#	} || {
+#		rm -f /etc/config/wireless
+#		/sbin/wifi detect > /etc/config/wireless
+#	}
+#
+#	scan_interfaces
+#
+#	local ifc
+#	for ifc in $interfaces; do
+#		local proto
+#		config_get proto "$ifc" proto
+#
+#		local auto
+#		config_get_bool auto "$ifc" auto 1
+#
+#		type "coldplug_interface_$proto" >/dev/null && [ "$auto" = 1 ] && \
+#			coldplug_interface_$proto "$ifc"
+#	done
+	###########
+
+
+	### bitonic ###
+	create-ca-cert.sh
+	###########
+}
+
+start() {
+	setup_switch() { return 0; }
+
+	include /lib/network
+	setup_switch
+	ifup -a
+	### ctc ###
+#	/sbin/wifi up
+	###########
+}
+
+stop() {
+	ifdown -a
+}
+
+restart() {
+	start
+}
+
+
+case "$1" in
+	"boot")		boot	;;
+	"start")	start	;;
+	"stop")		stop	;;
+	"restart")	restart	;;
+	*)
+				echo $0 'boot    - setup and start network function'
+				echo $0 'start   - start network function'
+				echo $0 'stop    - stop network function'
+				echo $0 'restart - restart network function'
+				;;
+esac

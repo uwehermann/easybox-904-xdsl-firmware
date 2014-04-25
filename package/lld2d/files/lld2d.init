@@ -1,0 +1,60 @@
+#!/bin/sh
+
+START=99
+
+DAEMON=/usr/sbin/lld2d
+NAME=lld2d
+PIDFILE=/var/run/$NAME.pid
+DESC="LLTD Protocol Responder"
+INTFACE=br-lan
+set -e
+is_running ()
+{
+   if [ -e "$PIDFILE" ]; then
+		#program is running 
+        return 0
+   fi
+   #program is not running
+   return 1
+}
+
+start() {
+   if is_running; then
+      echo "$DESC is already running. Not doing anything"
+      exit 0
+   fi
+   echo -n "Starting $DESC: "
+   start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON $INTFACE\
+      > /dev/null
+   echo $(pidof lld2d) > $PIDFILE
+   echo "$NAME."
+}
+
+stop() {
+   if ! is_running; then
+      echo "$DESC is not running. Not doing anything"
+      exit 0
+   fi
+   echo -n "Stopping $DESC: "
+   start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE \
+      --exec $DAEMON
+   rm -f $PIDFILE
+   echo "$NAME."
+}
+
+case "$1" in
+  boot)
+   start
+   ;;
+  start)
+   start
+   ;;
+  stop)
+   stop
+   ;;
+  *)
+   N=/etc/init.d/$NAME
+   echo "Usage: $N {start|stop}" >&2
+   ;;
+esac
+

@@ -1,0 +1,54 @@
+2007-11-26  Benjamin Zores  <ben@geexbox.org>
+
+	* Release 0.2.3.
+	* FIX: one header file was missing from previous tarball release.
+	* Support for LPCM and HeAACv2 profiles introduced in DLNA 1.5.
+	* Better check of AAC ADTS frame header.
+
+2007-11-24  Benjamin Zores  <ben@geexbox.org>
+
+	* Release 0.2.2.
+	* Proper build of both shared and static library.
+	* Remove some GNU CC specific syntax.
+	* Hide some elements from public API.
+
+2007-11-18  Benjamin Zores  <ben@geexbox.org>
+
+	* Release 0.2.1.
+	* Corrected many compilation warnings.
+	* Support for shared/static library build.
+	* Generates valid DMS description.
+	* Updates of public API.
+
+2007-11-10  Benjamin Zores  <ben@geexbox.org>
+
+	* Release 0.2.0.
+	* Updated public API.
+	* Code simplifications and bug fixes.
+	* Ensure library's thread-safety.
+
+2007-11-08  Benjamin Zores  <ben@geexbox.org>
+
+	* Release 0.1.4.
+	* Support for inclusion in C++ programs.
+
+2007-11-09  Alexis Saettler  <alexis@saettler.org>
+
+	* Added lib's version in configure, and use it to build the lib file
+	* Debianization of the library
+
+2007-11-08  Benjamin Zores  <ben@geexbox.org>
+
+	* Added support for AAC variants decoding.
+
+2007-11-04  Benjamin Zores  <ben@geexbox.org>
+
+        * New public release (version 0.1.1)
+	  Fixes build with ATRAC codec with old revisions of FFMPEG.
+	
+2007-11-02  Benjamin Zores  <ben@geexbox.org>
+
+        * First public release (version 0.1.0)
+        * support for all DLNA profiles discovery as found in
+	  "DLNA Networked Device Interoperability Guidelines,
+	  Volume 2: Media Format Profiles".

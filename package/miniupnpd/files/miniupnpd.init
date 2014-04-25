@@ -1,0 +1,328 @@
+#!/bin/sh
+#
+# Copyright (C) 2009 Arcadyan
+# All Rights Reserved.
+#
+START=92
+
+default_extif="br-lan"
+IPTABLES=iptables
+upnp_table="UPNPD"	
+cfg_file="/tmp/upnpd"
+tmp_cfg_file="$cfg_file.tmp"
+run_path=/var/run/miniupnpd.pid
+#local cfg_path="`echo $cfg_file | sed "s/.*\/$//g"`"	#default cfg_path="/tmp/upnpd/"
+cfg_path="/tmp"
+enable_natpmp="no"
+debug_log=0
+
+sync_section(){
+	echo "[UPNPD]~~~~~ sync section ~~~~~"
+	local gg=0
+	
+	[ -z `umngcli get upnp_default_enable@UPNPD` ] && {
+		umngcli set upnp_default_enable@UPNPD=1
+		echo "[UPNPD]set DPNPD.upnp_default_enable=`umngcli get upnp_default_enable@UPNPD`"
+		gg=1		
+	}
+	[ -z `umngcli get upnp_default_upnp_igd@UPNPD` ] && {	
+		umngcli set upnp_default_upnp_igd@UPNPD=0
+		echo "[UPNPD]set DPNPD.upnp_default_upnp_igd=`umngcli get upnp_default_upnp_igd@UPNPD`"
+		gg=1		
+	}
+	[ -z `umngcli get upnp_enable@UPNPD` ] && {	
+		umngcli set upnp_enable@UPNPD=1
+		echo "[UPNPD]set DPNPD.upnp_enable=`umngcli get upnp_enable@UPNPD`"
+		gg=1		
+	}
+	[ -z `umngcli get upnp_igd@UPNPD` ] && {	
+		umngcli set upnp_igd@UPNPD=0
+		echo "[UPNPD]set DPNPD.upnp_igd=`umngcli get upnp_igd@UPNPD`"
+		gg=1		
+	}
+	[ -z `umngcli get debug_log@UPNPD` ] && {	
+		umngcli set debug_log@UPNPD=0
+		echo "[UPNPD]set DPNPD.debug_log=`umngcli get debug_log@UPNPD`"
+		gg=1
+	}
+
+	[ -z `umngcli get upnp_av@DLNAS` ] && {
+		umngcli set upnp_av@DLNAS=1
+		echo "[UPNPD]set DLNAS.upnp_av=`umngcli get upnp_av@DLNAS`"
+		gg=1		
+	}
+	[ -z `umngcli get upnp_default_av@DLNAS` ] && {	
+		umngcli set upnp_default_av@DLNAS=1
+		echo "[UPNPD]set DLNAS.upnp_default_av=`umngcli get upnp_default_av@DLNAS`"	
+		gg=1		
+	}
+	[ -z `umngcli get music_num@DLNAS` ] && {	
+		umngcli set music_num@DLNAS=1
+		echo "[UPNPD]set DLNAS.music_num=`umngcli get music_num@DLNAS`"
+		gg=1		
+	}
+	[ -z `umngcli get video_num@DLNAS` ] && {	
+		umngcli set video_num@DLNAS=0
+		echo "[UPNPD]set DLNAS.video_num=`umngcli get video_num@DLNAS`"
+		gg=1		
+	}
+	[ -z `umngcli get picture_num@DLNAS` ] && {	
+		umngcli set picture_num@DLNAS=0
+		echo "[UPNPD]set DLNAS.picture_num=`umngcli get picture_num@DLNAS`"
+		gg=1		
+	}
+	[ -z `umngcli get dlna_scanning@DLNAS` ] && {	
+		#dlna_scanning: #0:ready, #1:running, #2:finished
+		umngcli set dlna_scanning@DLNAS=0
+		echo "[UPNPD]set DLNAS.dlna_scanning=`umngcli get dlna_scanning@DLNAS`"
+		gg=1		
+	}
+	[ -z `umngcli get web_upnp_av@DLNAS` ] && {	
+		umngcli set web_upnp_av@DLNAS=1
+		echo "[UPNPD]set DLNAS.web_upnp_av=`umngcli get web_upnp_av@DLNAS`"
+		gg=1
+	}
+	
+	[ $gg -eq 1 ] && { 
+		umngcli commitcfg
+		echo "[UPNPD] commit section ok."
+	}
+	return
+}
+
+make_scan_file(){
+	local scan_file=/tmp/dlna_scan.sh
+	echo "[UPNPD]~~~~~ make scan file ~~~~~"
+	[ ! -f $scan_file ] && {
+		touch $scan_file
+		echo "local video_type=\"asf avi dv divx wmv mjpg mjpeg mpeg mpg mpe mp2p vob mp2t m1v m2v m4v m4p mp4ps ts ogm mkv rmvb mov qt\"" >>$scan_file
+		echo "local music_type=\"aac ac3 aif aiff at3p au snd dts rmi mp1 mp2 mp3 mp4 mpa ogg wav pcm lpcm l16 wma mka ra rm ram\"" >>$scan_file
+		echo "local picture_type=\"bmp ico gif jpeg jpg jpe pcd png pnm ppm qti qtf qtif tif tiff\"" >>$scan_file
+		echo "local video_num=0												" >>$scan_file
+		echo "local music_num=0												" >>$scan_file
+		echo "local picture_num=0											" >>$scan_file
+		echo "for sub in \`find /tmp/usb | awk -F '.' '{print \$NF}'\`		" >>$scan_file
+		echo "do															" >>$scan_file
+		echo "	for s in \$video_type										" >>$scan_file
+		echo "	do 															" >>$scan_file
+		echo "		if [ \"\$sub\" == \"\$s\" ];then						" >>$scan_file
+		echo "			video_num=\`expr \$video_num + 1\`					" >>$scan_file
+		echo "		fi														" >>$scan_file
+		echo "	done														" >>$scan_file
+		echo "	for s in \$music_type										" >>$scan_file
+		echo "	do 															" >>$scan_file
+		echo "		if [ \"\$sub\" == \"\$s\" ];then						" >>$scan_file
+		echo "			music_num=\`expr \$music_num + 1\`					" >>$scan_file
+		echo "		fi														" >>$scan_file
+		echo "	done														" >>$scan_file
+		echo "	for s in \$picture_type										" >>$scan_file
+		echo "	do 															" >>$scan_file
+		echo "		if [ \"\$sub\" == \"\$s\" ];then						" >>$scan_file
+		echo "			picture_num=\`expr \$picture_num + 1\`				" >>$scan_file
+		echo "		fi														" >>$scan_file
+		echo "	done														" >>$scan_file
+		echo "done															" >>$scan_file
+		echo "echo \"[DLNAS]video:\$video_num, music:\$music_num, picture:\$picture_num\"" >>$scan_file
+		echo "																" >>$scan_file
+		echo "umngcli set music_num@DLNAS=\$music_num						" >>$scan_file
+		echo "umngcli set video_num@DLNAS=\$video_num						" >>$scan_file
+		echo "umngcli set picture_num@DLNAS=\$picture_num					" >>$scan_file
+		echo "umngcli set dlna_scanning@DLNAS=0							" >>$scan_file
+		echo "umngcli commitcfg											" >>$scan_file
+		echo "echo \"[DLNAS] SYNC finished.\"								" >>$scan_file
+		
+		echo "[UPNPD] make scanfile '$scan_file' ok."
+	}
+}
+
+
+make_dlna_file(){
+	local dlna_file=/tmp/ushare.conf
+	
+	[ ! -f $dlna_file ] && {
+		local tmp_dlna_file="${dlna_file}.tmp"
+		echo "[DLNAS] make dlna config file ${dlna_file}."
+		
+		touch $tmp_dlna_file
+		echo "USHARE_NAME=Arcadyan" >> $tmp_dlna_file
+		echo "USHARE_IFACE=br-lan" >> $tmp_dlna_file
+		echo "USHARE_PORT=49200" >> $tmp_dlna_file
+		echo "USHARE_TELNET_PORT=1337" >> $tmp_dlna_file
+		echo "USHARE_DIR=/tmp/usb" >> $tmp_dlna_file
+		echo "USHARE_OVERRIDE_ICONV_ERR=" >> $tmp_dlna_file
+		echo "ENABLE_WEB=no" >> $tmp_dlna_file
+		echo "ENABLE_TELNET=no" >> $tmp_dlna_file
+		echo "ENABLE_XBOX=yes" >> $tmp_dlna_file
+		echo "USHARE_OPTIONS=-x" >> $tmp_dlna_file
+		echo "ENABLE_DLNA=yes" >> $tmp_dlna_file
+		mv $tmp_dlna_file $dlna_file
+	}
+
+	#start ushare-server
+	local upnp_av=0
+	local num_pids=`ps | awk '/ushare/ && !/awk/ {print $1}' | wc -l`
+	local if_name=`ifconfig | awk '/br-lan/ {print $1}'`
+	[ `umngcli get upnp_av@DLNAS` ] && upnp_av=`umngcli get upnp_av@DLNAS`
+#	[ $if_name ] && [ $upnp_av -eq 1 ] && [ $num_pids -eq 0 ] && {
+#		ushare -f $dlna_file & 
+#		echo "[DLNAS] ushare starts successfully."
+#	}
+	[ $num_pids -eq 0 ] && {
+		umngcli set music_num@DLNAS=0
+		umngcli set video_num@DLNAS=0
+		umngcli set picture_num@DLNAS=0
+	}
+}
+
+start() {
+
+	sync_section
+	make_scan_file
+	make_dlna_file
+
+	[ "`umngcli get dlna_scanning@DLNAS`" == "1" ] && return 0
+	[ "`umngcli get upnp_enable@$upnp_table`" == "0" ] && {
+		#[ -f $run_path ] && pkill -9 'miniupnpd'
+		pkill -9 "miniupnpd"
+		echo "[$upnp_table]upnpd stopped." && return 0
+	}
+	[ "`umngcli get upnp_igd@$upnp_table`"  == "1" ] && enable_natpmp="yes"
+	[ "`umngcli get debug_log@$upnp_table`" == "1" ] && debug_log=1
+	local changed=0
+	
+	#remove tmp_cfg_file
+	[ -f $tmp_cfg_file ] && rm -f $tmp_cfg_file
+	
+	#searching for external interface from default route
+	EXTIF="`ip route | grep 'default via' | awk '{print $5}'`"
+	if [ -z "$EXTIF" ];then
+		echo "[$upnp_table]EXTIF is not found! Use '$default_extif' instead"
+		EXTIF=$default_extif
+		#[ -f $run_path ] && [ -n "`cat $run_path`" ] && pkill -9 'miniupnpd'
+		#return 1
+	fi
+	echo "[$upnp_table]External Interface = $EXTIF"
+
+	local EXTIP="`LC_ALL=C /sbin/ifconfig $EXTIF | grep 'inet addr' | awk '{print $2}' | sed -e 's/.*://'`"
+	if [ -z "$EXTIP" ];then
+		echo "[$upnp_table]EXTIP is not found!(???)"
+		#[ -f $run_path ] && [ -n "`cat $run_path`" ] && pkill -9 'miniupnpd'
+		#pkill -9 "miniupnpd"
+		#return 1
+	fi
+	echo "[$upnp_table]External IP = $EXTIP"
+
+	#check whether cfg_file exists
+	[ ! -f $cfg_file ] && [ ! -d $cfg_path ] && [ mkdir $cfg_path ]
+	{
+		touch $tmp_cfg_file
+		echo "ext_ifname=$EXTIF" >> $tmp_cfg_file
+		echo "ext_ip=" >> $tmp_cfg_file
+		echo "listening_ip=192.168.2.1" >> $tmp_cfg_file
+		echo "port=5000" >>  $tmp_cfg_file
+		echo "enable_natpmp=$enable_natpmp" >> $tmp_cfg_file
+		echo "upnp_forward_chain=$upnp_table" >> $tmp_cfg_file
+		echo "upnp_nat_chain=$upnp_table" >> $tmp_cfg_file
+		echo "bitrate_up=4194304" >> $tmp_cfg_file
+		echo "bitrate_down=8388608" >> $tmp_cfg_file
+		echo "notify_interval=30" >> $tmp_cfg_file
+		echo "packet_log=$debug_log" >> $tmp_cfg_file
+		echo "allow 1024-65535 192.168.2.0/24 1024-65535" >> $tmp_cfg_file
+		echo "deny 0-65535 0.0.0.0/0 0-65535" >> $tmp_cfg_file		
+	} 
+	
+	if [ ! -f $cfg_file ];then
+		echo "[$upnp_table]Warning: $cfg_file is not existed."
+		changed=1
+	elif [ -n "`cmp $tmp_cfg_file $cfg_file`" ];then
+		echo "[$upnp_table]Warning:option 'ext_ifname' or 'enable_pmp' has been changed!"
+		changed=1
+	fi
+
+	if [ $changed -eq 1 ]; then
+		#[ -f $run_path ] && [ -n "`cat $run_path`" ] && pkill -9 'miniupnpd'
+		pkill -9 "miniupnpd"
+		rm $run_path
+		chmod 755 $cfg_path
+		mv $tmp_cfg_file $cfg_file
+		echo "[$upnp_table]move file '$tmp_cfg_file' to '$cfg_file'"
+	else
+		rm -f $tmp_cfg_file
+		echo "[$upnp_table]remove $tmp_cfg_file"
+		echo "[$upnp_table]nothing changed"
+
+		num_pids=`ps | awk '/miniupnpd/ && !/awk/ {print $1}' | wc -l`
+		[ $num_pids -eq 1 ] && return 0
+		[ $num_pids -eq 0 ] && {
+			rm $run_path
+			echo "[$upnp_table]upnpd is not running."
+		}
+	fi
+
+	#[ $debug_log -eq 1 ] &&  miniupnpd -d -f "$cfg_file" & 
+	#[ $debug_log -eq 0 ] &&  miniupnpd -f "$cfg_file" &
+	/usr/bin/miniupnpd -f "$cfg_file" &
+	sleep 5
+	[ -f $run_path ] && echo "[$upnp_table]Upnpd starts." && [ $enable_natpmp = 'yes' ] && [ $EXTIF != $default_extif ] && {
+		#add firewall
+		#adding the $upnp_table chain for nat	
+		#adding the rule to $upnp_table
+		[ -n "`$IPTABLES -t nat -N $upnp_table`" ] && $IPTABLES -t nat -A PREROUTING -d $EXTIP -i $EXTIF -j $upnp_table
+
+		#adding the $upnp_table chain for filter
+		#adding the rule to $upnp_table
+		[ -n "`$IPTABLES -t filter -N $upnp_table`" ] && $IPTABLES -t filter -A FORWARD -i $EXTIF -o ! $EXTIF -j $upnp_table
+		echo "[$upnp_table]iptable initialized."
+	}
+	[ ! -f $run_path ] && echo "[$upnp_table]Upnpd fails."
+	return 0
+}
+
+clear_rule() {
+	#searching for external interface from default route
+	EXTIF="`ip route | grep 'default via' | awk '{print $5}'`"
+	if [ -z "$EXTIF" ];then
+		echo "[$upnp_table]EXTIF is not found!"
+		#[ -n "`cat $run_path`" ] && pkill -9 'miniupnpd'
+		pkill -9 "miniupnpd"
+		return 1
+	fi
+	echo "[$upnp_table]External Interface = $EXTIF"
+	
+	local EXTIP="`LC_ALL=C /sbin/ifconfig $EXTIF | grep 'inet addr' | awk '{print $2}' | sed -e 's/.*://'`"
+
+	[ "$EXTIF" != "$default_extif" ] && [ -n "$EXTIP" ] && {
+		$IPTABLES -t nat -D PREROUTING -d $EXTIP -i $EXTIF -j $upnp_table
+		$IPTABLES -t filter -D FORWARD -i $EXTIF -o ! $EXTIF -j $upnp_table
+	}
+	return 0
+}
+
+stop() {
+	[ -f $run_path ] && {
+		pkill -9 "miniupnpd"
+		rm $run_path
+		echo "[$upnp_table] upnpd is stopped."
+	}
+	return 0
+}
+
+sync() {
+	sync_section
+	make_scan_file
+	make_dlna_file
+}
+
+
+case "$1" in
+	"boot")		start &	;;
+	"start")	start &	;;
+	"stop")		stop	;;
+	"sync")		sync	;;
+	*)
+				echo $0 'boot  - setup and start UPnP function'
+				echo $0 'start - start UPnP function'
+				echo $0 'stop  - stop UPnP function'
+				echo $0 'sync  - synchronize UPnP configuration'
+				;;
+esac

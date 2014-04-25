@@ -1,0 +1,65 @@
+menu "Configuration"
+	depends on PACKAGE_ifx-dsl-cpe-control-vrx
+
+	config ifx-dsl-cpe-control-vrx_DTI
+		bool "Include DTI"
+		select PACKAGE_lib-dti
+		default n
+		help
+		  Defines to include/exclude the Debug & Trace Interface.
+
+	choice
+		prompt "build model"
+		default ifx-dsl-cpe-control-vrx_MODEL_FOOTPRINT
+		help
+		  Selection of a model (predefined combination of configure options).
+
+	config ifx-dsl-cpe-control-vrx_MODEL_LITE
+		bool "Lite"
+		help
+		  Minimum features included.
+		  This model should ONLY demonstrate the minimum possible size.
+
+	config ifx-dsl-cpe-control-vrx_MODEL_FOOTPRINT
+		bool "Footprint"
+		select ifx-dsl-cpe-control-vrx_DTI
+		help
+		  Defined for low footprint applications.
+
+	config ifx-dsl-cpe-control-vrx_MODEL_TYPICAL
+		bool "Typical"
+		select ifx-dsl-cpe-control-vrx_DTI
+		help
+		  Defined for most typical use.
+
+	config ifx-dsl-cpe-control-vrx_MODEL_FULL
+		bool "Full"
+		select ifx-dsl-cpe-control-vrx_DTI
+		help
+		  Includes all features but NOT all debug functionalities.
+
+	config ifx-dsl-cpe-control-vrx_MODEL_DEBUG
+		bool "Debug"
+		select ifx-dsl-cpe-control-vrx_DTI
+		help
+		  Includes all features AND debug functionalities.
+	endchoice
+
+	menu "optional build options"
+		depends on PACKAGE_ifx-dsl-cpe-control-vrx
+	config ifx-dsl-cpe-control-vrx_USE_ADDITIONAL_BUILD_OPTIONS
+		bool "Use additional build options"
+		default n
+		help
+		  Provides the possibility to include/exclude single features directly.
+		  This configuration overwrites selections which are done by the "build model" configuration.
+
+	config ifx-dsl-cpe-control-vrx_ADDITIONAL_BUILD_OPTIONS
+		depends on ifx-dsl-cpe-control-vrx_USE_ADDITIONAL_BUILD_OPTIONS
+		string "Additional build options"
+		help
+		  Defines to include/exclude single feature using available configure options.
+		  Please refer to the documentation of the DSL CPE API "Configure options for the DSL CPE API"
+
+	endmenu
+endmenu

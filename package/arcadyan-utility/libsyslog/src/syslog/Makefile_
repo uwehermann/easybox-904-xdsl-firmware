@@ -1,0 +1,42 @@
+SYSLOGD_FILENAME = umng_syslogd
+
+LIB_VERMAJOR = 0
+LIB_VERMINOR = 1
+SYSLOGLIB_FILENAME = libumngsyslog.so
+
+LIB_CFLAGS  = $(CFLAGS) -shared -fPIC
+LIB_LDFLAGS = $(LDFLAGS) -Wl,-soname,$(SYSLOGLIB_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR)
+
+DAEMON_CFLAGS  = $(CFLAGS)
+DAEMON_LDFLAGS = $(LDFLAGS)
+
+DAEMON_OBJ = umng_syslogd.o
+TEST_OBJ = umng_test_syslog.o
+LIB_OBJ = umng_syslog.o
+
+all: umng_syslogd libumngsyslog umng_test_syslog
+
+umng_syslogd: libumngsyslog
+	$(CC) $(DAEMON_CFLAGS) -c -o umng_syslogd.o umng_syslogd.c
+	$(CC) -o $(SYSLOGD_FILENAME) $(DAEMON_LDFLAGS) $(DAEMON_OBJ) \
+		$(SYSLOGLIB_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR)
+
+umng_syslogd.o: umng_syslogd.c
+	$(CC) $(DAEMON_CFLAGS) -c -o $@ $<
+
+umng_test_syslog: libumngsyslog
+	$(CC) $(DAEMON_CFLAGS) -c -o umng_test_syslog.o umng_test_syslog.c
+	$(CC) -o umng_test_syslog $(DAEMON_LDFLAGS) $(TEST_OBJ) \
+		$(SYSLOGLIB_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR)
+
+umng_test_syslog.o: umng_test_syslog.c
+	$(CC) $(DAEMON_CFLAGS) -c -o $@ $<
+
+libumngsyslog:
+	$(CC) $(LIB_CFLAGS) -c -o umng_syslog.o umng_syslog.c
+	$(CC) $(LIB_CFLAGS) $(LIB_LDFLAGS) \
+		-o $(SYSLOGLIB_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(LIB_OBJ)
+#	ln -sf $(SYSLOGLIB_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(SYSLOGLIB_FILENAME)
+
+clean:
+	rm -f $(SYSLOGD_FILENAME) $(SYSLOGLIB_FILENAME)* *.o umng_test_syslog

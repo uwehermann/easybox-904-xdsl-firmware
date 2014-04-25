@@ -1,0 +1,68 @@
+#!/bin/sh
+#START=50
+
+CFG_FILE=/tmp/yaddns.conf
+
+sync() {
+	enable=`umngcli get enable@ddns`
+	username=`umngcli get username1@ddns`
+	password=`umngcli get password1@ddns`
+	hostname=`umngcli get hostname1@ddns`
+	WANIF=`wandataif.sh`
+	echo '# enable = "'${enable}'"'			 > ${CFG_FILE}
+	echo 'wanifname = "'${WANIF}'"'		 	>> ${CFG_FILE}
+	echo 'mode = "direct"'					>> ${CFG_FILE}
+	echo ''									>> ${CFG_FILE}
+	echo 'account {'						>> ${CFG_FILE}
+	echo '    name = "dyndns test"'			>> ${CFG_FILE}
+	echo '    service = "dyndns"'			>> ${CFG_FILE}
+	echo '    username = "'${username}'"'	>> ${CFG_FILE}
+	echo '    password = "'${password}'"'	>> ${CFG_FILE}
+	echo '    hostname = "'${hostname}'"'	>> ${CFG_FILE}
+	echo '}'								>> ${CFG_FILE}
+	echo ''									>> ${CFG_FILE}
+}
+
+start() {
+	if [ "$(umngcli get enable@ddns)" == "1" ] ; then
+		/usr/sbin/yaddns -D -f ${CFG_FILE}
+	fi
+}
+
+boot() {
+	sync
+	start
+}
+
+stop() {
+	local PID
+	local PIDS
+
+	PIDS=`ps | grep "yaddns" | awk '{ print $1 }'`
+	for PID in $PIDS ; do
+		if [ $PID -ne $$ ] && [ $PID -ne $PPID ] ; then
+			kill ${PID} 2>&-
+		fi
+	done
+}
+
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	"boot")		boot  ;;
+	"start")	start ;;
+	"stop")		stop  ;;
+	"restart")	restart ;;
+	"sync")		sync  ;;
+	*)
+				echo $0 'boot          - setup and start DDNS function'
+				echo $0 'start         - start DDNS function'
+				echo $0 'stop          - stop DDNS function'
+				echo $0 'restart       - restart DDNS function'
+				echo $0 'sync          - synchronize DDNS configuration'
+				;;
+esac
+

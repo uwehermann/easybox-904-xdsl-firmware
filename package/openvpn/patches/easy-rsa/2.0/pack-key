@@ -1,0 +1,10 @@
+#!/bin/sh
+
+#
+# Build a root certificate
+#
+
+
+cd /tmp/Client_key
+zip Client_key.zip *
+mv Client_key.zip /tmp

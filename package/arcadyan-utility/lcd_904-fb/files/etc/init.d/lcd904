@@ -1,0 +1,109 @@
+#!/bin/sh
+#
+# Copyright (C) 2010 Arcadyan
+# All Rights Reserved.
+#
+#    LCD Driver
+#
+
+START=98
+
+LCD_DEMO=0
+LCD_KM_FILE=/lib/modules/`uname -r`/drv_lcd_904.ko
+LCD_PROC_FILE=/proc/driver/lcd904
+LCD_DEV_FILE=/dev/lcd904
+CFG_FILE=/etc/config.sh
+GPIO_FILE=/proc/driver/ifx_gpio/setup
+GPIO_MIN=0
+GPIO_MAX=49
+
+
+start()
+{
+	insmod ${LCD_KM_FILE}
+
+	mknod ${LCD_DEV_FILE} c 233 1
+
+#	echo init > ${LCD_PROC_FILE}
+
+	if [ `/bin/grep -ci mptest /proc/cmdline` -ge 1 ] ; then
+		lcd_demo -d > /dev/console &
+	elif [ $LCD_DEMO == 1 ] ; then
+		lcd_demo &
+#		lcd_demo -n &
+#		lcd_demo -d > /dev/console &
+#		lcd_demo -n -d > /dev/console &
+	fi
+}
+
+stop()
+{
+	pkill lcd_demo
+
+#	echo shutdown > ${LCD_PROC_FILE}
+
+	rm -f ${LCD_DEV_FILE}
+
+	rmmod ${LCD_KM_FILE}
+}
+
+boot()
+{
+#	echo disable > ${GPIO_FILE}
+
+	GPIO=`grep LCD_GPIO_RST $CFG_FILE | cut -d "=" -f 2`
+	if [ -z "$GPIO" ] ; then
+		GPIO=6
+	fi
+	if [ "$GPIO" -ge $GPIO_MIN ] && [ "$GPIO" -le $GPIO_MAX ] ; then
+		echo free ${GPIO} > $GPIO_FILE
+	fi
+
+	GPIO=`grep LCD_GPIO_BL $CFG_FILE | cut -d "=" -f 2`
+	if [ -z "$GPIO" ] ; then
+		GPIO=28
+	fi
+	if [ "$GPIO" -ge $GPIO_MIN ] && [ "$GPIO" -le $GPIO_MAX ] ; then
+		echo free ${GPIO} > $GPIO_FILE
+	fi
+
+	GPIO=`grep LCD_GPIO_LED $CFG_FILE | cut -d "=" -f 2`
+	if [ -z "$GPIO" ] ; then
+		GPIO=31
+	fi
+	if [ "$GPIO" -ge $GPIO_MIN ] && [ "$GPIO" -le $GPIO_MAX ] ; then
+		echo free ${GPIO} > $GPIO_FILE
+	fi
+
+	mem -u -s 0x1e105328 -w 0x160000f1
+	mem -u -s 0x1e105368 -w 0x1d3dd
+
+	if [ -f /etc/lcd_image.tgz ] ; then
+		if [ $LCD_DEMO == 1 ] || [ `/bin/grep -ci mptest /proc/cmdline` -ge 1 ] ; then
+			tar zxvf /etc/lcd_image.tgz -C /tmp
+		fi
+	fi
+
+	start
+}
+
+restart()
+{
+	stop
+
+	start
+}
+
+case "$1" in
+	"boot")		boot &		;;
+	"start")	start &		;;
+	"stop")		stop		;;
+	"restart")	restart &	;;
+	*)
+				echo $0 'boot    - setup and start LCD'
+				echo $0 'start   - start LCD'
+				echo $0 'stop    - stop LCD'
+				echo $0 'restart - restart LCD'
+				;;
+esac
+

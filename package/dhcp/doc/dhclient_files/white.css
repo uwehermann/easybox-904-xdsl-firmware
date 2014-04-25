@@ -1,0 +1,104 @@
+body,table {
+	padding: 0;
+	font-family: arial, sans-serif;
+	background-color: #fff;
+	color: #000;
+}
+
+body {
+        margin: 0;
+	font-size: 84%;
+	background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAH4AAAAhAQMAAAAlNY3pAAAABlBMVEVmAABmZmag5upWAAAAE0lEQVQoU2NkQAUcjKMCowJ4BABBCQEqSqTgLwAAAABJRU5ErkJggg==);
+	*background-image: url(/style/bg.png);
+	background-repeat: repeat-y;
+	background-position: top left;
+}
+
+table { font-size: 1em; }
+
+#bg {
+	margin: 10px 10px 10px 136px;
+        max-width: 1024px;
+        width: expression( document.body.clientWidth > 1026 ? "1024px" : "auto" );
+}
+#content { 
+	margin: 0;
+	padding: 0;
+}
+#menu {
+        font-size: 13px;
+	text-align: left;
+	color: #999;
+	background-color: #600;
+	border: 0;
+	border-bottom: 1px #000 dashed;
+	margin: 0;
+	position: absolute;
+	top: 0;
+	left: 0;
+	padding: 4px 0 4px 4px; 
+	width: 120px;
+}
+
+b, strong { font-weight: bold }
+i { font-style: italic }
+a { color: #600 }
+hr {
+	height: 1px;
+	border: 0;
+	color: #600;
+	background-color: #600;
+}
+h1 { 
+	text-align: left;
+	font-size: 1.5em;
+	margin-top: 0;
+        border-bottom: #600 solid 2px;
+	line-height: 125%;
+}
+h2 { font-size: 1.25em; }
+img { border: none }
+input { border-color: #999 }
+pre,tt { font-family: monospace; font-size: 12px }
+
+#menu a { color: #fff; display: block; padding-left: 8px; text-indent: -8px; text-decoration: none }
+#menu a:hover { background-color: #933 }
+#menu dl { margin: 8px 0 8px 4px; padding-left: 0; text-align: left }
+#menu dd { margin: 0 0 0 8px; padding-left: 0 }
+#menu dt { font-size: 1.25em }
+#menu input { background-color: #fcc; border-color: #fcc; width: 92px }
+#menu label { font-size: .75em; margin-top: 1.5em; display: block }
+#news { margin: 1em 0; padding: .5em; background-color: #eee; }
+#news ul { margin: 0; padding: 0 }
+#news li { list-style-type: none; margin: 0; padding: 0 0 0 4em; text-indent: -4em }
+#menu iframe { margin: 1em 0 1em -3px; padding: 2px 1px; width: 120px; }
+.center { text-align: center }
+.source { font-size: .75em; font-style: italic; }
+.even { background-color: #fee; }
+.odd { background-color: #eee; }
+.code { padding: 0 2em 0 0 }
+.sidebar { background-color: #fee; border: solid 1px #600; padding: .5em 1em }
+.highlight { background-color: #fcc }
+
+#admenu { background-color: #fff; height: 600px }
+#adlink { background-color: #600; height: 100px }
+#admiddle { margin: .5em 3em }
+#adbottom { margin: 1em 0 4em .5em }
+#adright { float: right; margin: 0 20% .5em 1em }
+
+/* be nice to Opera 5 */
+body>#Menu { width: 116px }
+
+@media print
+{
+	body, #bg { margin: 0px; color: #000; background-image: none; font-size: 12pt }
+        pre, tt { font-size: 12pt }
+	a { text-decoration: underline }
+	form, #menu, #admiddle, #adbottom, #adright { display: none }
+}
+
+@media screen and (max-device-width: 480px)
+{
+	body,table { -webkit-text-size-adjust: 180% }
+	#menu { -webkit-text-size-adjust: 120% }
+}

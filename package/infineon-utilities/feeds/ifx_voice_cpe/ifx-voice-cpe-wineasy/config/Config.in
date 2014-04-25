@@ -1,0 +1,31 @@
+choice
+   prompt "board selection"
+   depends on PACKAGE_ifx-voice-cpe-wineasy
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY50712_V3  if (TARGET_ifxcpe_platform_danube || TARGET_ltqcpe_platform_danube)
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY508xx     if (TARGET_ifxcpe_platform_ar9 || TARGET_ltqcpe_platform_ar9)
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY80910     if (TARGET_ifxcpe_platform_vr9 || TARGET_ltqcpe_platform_vr9)
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY50812
+   help
+      Select the target platform.
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_EASY50712
+      bool "Danube reference board"
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_EASY50712_V3
+      bool "Danube reference board V3"
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_EASY508xx
+      bool "AR9/GR9 reference board"
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_EASY80910
+      bool "VR9 reference board"
+
+endchoice
+
+config  LTQ_VOICE_CPE_WINEASY_DXT_EXT
+	bool "enable DuSLIC-xT extension board support"
+	depends on PACKAGE_ifx-voice-cpe-wineasy && PACKAGE_ifx-voice-cpe-tapi-duslic_xt && (TARGET_ifxcpe_platform_ar9 || TARGET_ifxcpe_platform_vr9 || TARGET_ltqcpe_platform_ar9 || TARGET_ltqcpe_platform_vr9)
+	default y
+	help
+		enable DuSLIC-xT extension board support
+

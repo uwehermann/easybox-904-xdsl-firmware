@@ -1,0 +1,268 @@
+#!/bin/sh
+[ -z "$1" ] && echo "Error: should be run by udhcpc" && exit 1
+
+. /etc/functions.sh
+include /lib/network
+RESOLV_CONF="/tmp/resolv.conf.auto"
+
+## bitonic update, ctc added
+DEFAULT_ROUTER="0.0.0.0"
+## end of bitonic update
+
+change_state () {
+	[ -n "$ifc" ] || return
+	uci_revert_state "$1" "$2" "$3" "$4"
+	uci_set_state "$1" "$2" "$3" "$4"
+}
+
+set_classless_routes() {
+	local max=128
+	local type
+	while [ -n "$1" -a -n "$2" -a $max -gt 0 ]; do
+		[ ${1##*/} -eq 32 ] && type=host || type=net
+		echo "udhcpc: adding route for $type $1 via $2"
+		route add -$type "$1" gw "$2" dev "$interface"
+		max=$(($max-1))
+		shift 2
+	done
+}
+
+setup_interface () {
+	local old_ip
+	local old_broadcast
+	local old_subnet
+	local old_router
+	local old_dns
+	local user_dns
+	local user_router
+	local user_metric
+
+    #if [ "${interface:0:3}" == "lte" ]; then
+    #    subnet=255.255.255.255
+    #fi
+
+	[ -n "$ifc" ] && {
+		old_ip="$(uci_get_state network "$ifc" ipaddr)"
+		old_broadcast="$(uci_get_state network "$ifc" broadcast)"
+		old_subnet="$(uci_get_state network "$ifc" netmask)"
+	}
+
+	[ "$ip" != "$old_ip" ] \
+	|| [ "${broadcast:-+}" != "$old_broadcast" ] \
+	|| [ "${subnet:-255.255.255.0}" != "$old_subnet" ] && {
+		echo "udhcpc: ifconfig $interface $ip netmask ${subnet:-255.255.255.0} broadcast ${broadcast:-+}"
+		ifconfig $interface $ip netmask ${subnet:-255.255.255.0} broadcast ${broadcast:-+}
+
+		change_state network "$ifc" ipaddr "$ip"
+		change_state network "$ifc" broadcast "${broadcast:-+}"
+		change_state network "$ifc" netmask "${subnet:-255.255.255.0}"
+	}
+
+
+	# Default Route
+	[ -n "$ifc" ] && {
+		change_state network "$ifc" lease_gateway "$router"
+		old_router="$(uci_get_state network "$ifc" gateway)"
+		user_router="$(uci_get network "$ifc" gateway)"
+		user_metric="$(uci_get network "$ifc" metric)"
+		### ctc ##
+#		[ -n "$user_router" ] && router="$user_router"
+		[ -n "$user_router" ] && [ "$user_router" != "0.0.0.0" ] && [ "$user_router" != "255.255.255.255" ] && router="$user_router"
+		###########
+	}
+
+	[ -n "$router" ] && [ "$router" != "0.0.0.0" ] && [ "$router" != "255.255.255.255" ] && [ "$router" != "$old_router" ] && {
+	    defaultroute="$(uci_get network "$ifc" defaultroute)"
+	    [ "$defaultroute" = "1" ] && {
+		echo "udhcpc: setting default routers: $router"
+
+		local valid_gw=""
+		for i in $router ; do
+			route add default gw $i ${user_metric:+metric $user_metric} dev $interface
+			valid_gw="${valid_gw:+$valid_gw|}$i"
+		done
+		
+		eval $(route -n | awk '
+			/^0.0.0.0\W{9}('$valid_gw')\W/ {next}
+			/^0.0.0.0/ {print "route del -net "$1" gw "$2";"}
+		')
+
+		change_state network "$ifc" gateway "$router"
+            
+		    ## bitonic update, ctc added
+		    DEFAULT_ROUTER="$router"
+		    ## end of bitonic update
+	    }
+	}
+
+	# CIDR STATIC ROUTES (rfc3442)
+	[ -n "$staticroutes" ] && set_classless_routes $staticroutes
+	[ -n "$msstaticroutes" ] && set_classless_routes $msstaticroutes
+
+	# DNS
+	### ctc ###
+#	old_dns=$(uci_get_state network "$ifc" dns)
+#	old_domain=$(uci_get_state network "$ifc" dnsdomain)
+#	user_dns=$(uci_get "network.$ifc.dns")
+#	[ -n "$user_dns" ] && dns="$user_dns"
+#
+#	[ -n "$dns" ] && [ "$dns" != "$old_dns" -o -n "$user_dns" ] && {
+#		echo "udhcpc: setting dns servers: $dns"
+#		add_dns "$ifc" $dns
+#
+#		[ -n "$domain" ] && [ "$domain" != "$old_domain" ] && {
+#			echo "udhcpc: setting dns domain: $domain"
+#			sed -i -e "${old_domain:+/^search $old_domain$/d; }/^search $domain$/d" "${RESOLV_CONF}"
+#			echo "search $domain" >> "${RESOLV_CONF}"
+#			change_state network "$ifc" dnsdomain "$domain"
+#		}
+#	}
+	### add ###
+	if [ -n "$opt240" ] ; then
+		old_val=`umngcli get dhcp_option_240@lan0`
+		if [ -n "$opt240" ] && [ "$opt240" != "$old_val" ] ; then
+			umngcli set dhcp_option_240@lan0="$opt240"
+			umngcli commitcfg
+		fi
+	fi
+
+	#prepare fake mac for lte interfaces DNS
+	if [ "${interface:0:3}" == "lte" ]; then
+		lst_dgt=${interface:3:1}
+		mac="00:06:4e:a0:00:0$((lst_dgt+1))"
+
+		for tmp_d in $dns ; do
+			ip neigh add $tmp_d lladdr $mac nud permanent dev $interface
+			if [ "$?" != "0" ]; then
+				ip neigh change $tmp_d lladdr $mac nud permanent dev $interface
+			fi
+		done
+	fi
+	
+	WANIF=`wandataif.sh`
+	if [ "${WANIF}" == "${interface}" ]; then 
+		echo "$dns" > /tmp/dynamic_dns_ip
+	fi
+
+	resolv_update.sh $interface $dns
+
+	[ -n "$router" ] && [ "$router" != "0.0.0.0" ] && [ "$router" != "255.255.255.255" ] && {
+		if [ "${interface:0:3}" == "lte" ]; then
+			#lst_dgt=${interface:3:1}
+			#mac="00:06:4e:a0:00:0$((lst_dgt+1))"
+			ip neigh add $router lladdr $mac nud permanent dev $interface
+			if [ "$?" != "0" ]; then
+				ip neigh change $router lladdr $mac nud permanent dev $interface
+			fi
+		fi
+	}
+
+	if [ -n "$ip6rd" ] ; then
+		NETSECT=`if2sect.sh ${interface}`
+		old_val=`umngcli get ip6_6rd_info@${NETSECT}`
+		if [ -n "$ip6rd" ] && [ "$ip6rd" != "$old_val" ] ; then
+			umngcli set ip6_6rd_info@${NETSECT}="$ip6rd"
+			umngcli commitcfg
+		fi
+		echo "[default.script] ip6rd=$ip6rd interface=$interface NETSECT=$NETSECT old_val=$old_val" >> /tmp/ipv6.log
+	fi
+	resolv_update.sh $interface $dns
+	###########
+
+	[ -n "$ifc" ] || return
+
+	# UCI State
+	change_state network "$ifc" lease_server "$serverid"
+	change_state network "$ifc" lease_acquired "$(sed -ne 's![^0-9].*$!!p' /proc/uptime)"
+	change_state network "$ifc" lease_lifetime "$lease"
+	[ -n "$ntpsrv" ] && 	change_state network "$ifc" lease_ntpsrv "$ntpsrv"
+	[ -n "$timesvr" ] && 	change_state network "$ifc" lease_timesrv "$timesvr"
+	[ -n "$hostname" ] &&	change_state network "$ifc" lease_hostname "$hostname"
+	[ -n "$timezone" ] && 	change_state network "$ifc" lease_timezone "$timezone"
+
+
+	# Hotplug
+	env -i ACTION="$1" INTERFACE="$ifc" DEVICE="$ifname" PROTO=dhcp IP4ADDR="$ip" IP4MASK="$subnet" IP4GW="$router" /sbin/hotplug-call iface
+}
+
+
+scan_interfaces
+applied=
+for ifc in $interfaces __default; do
+	if [ "$ifc" = __default ]; then
+		ifc=""
+		[ -n "$applied" ] && continue
+	else
+		config_get ifname "$ifc" ifname
+		[ "$ifname" = "$interface" ] || continue
+
+		config_get proto "$ifc" proto
+		[ "$proto" = "dhcp" ] || continue
+		applied=true
+
+	  ### ctc ##
+#		### bitonic update, ctc added
+#		config_get defaultroute $ifc defaultroute
+#		[ "$defaultroute" = "1" ] && {
+#			for i in $router ; do
+#				echo "adding router $i"
+#				route add default gw $i dev $interface
+#				valid="$valid|$i"
+#				if [ "$DEFAULT_ROUTER" = "0.0.0.0" ]; then
+#					DEFAULT_ROUTER=$i
+#				fi
+#			done
+#
+#			echo "deleting old routes"
+#			$(route -n | awk '/^0.0.0.0\W{9}('$valid')\W/ {next} /^0.0.0.0/ {print "route del -net "$1" gw "$2";"}')
+#		}
+#		#######################
+	  ##########
+	fi
+
+	case "$1" in
+		deconfig)
+			### ctc ###
+			resolv_update.sh $interface
+			###########
+			ifconfig "$interface" 0.0.0.0
+			[ -n "$ifc" ] && {
+				env -i ACTION="ifdown" INTERFACE="$ifc" DEVICE="$ifname" PROTO=dhcp /sbin/hotplug-call iface
+
+				config_get device "$ifc" device
+				config_get ifname "$ifc" ifname
+				config_get aliases "$ifc" aliases
+				uci_revert_state network "$ifc"
+				[ -n "$device" ] && uci_set_state network "$ifc" device "$device"
+				[ -n "$ifname" ] && uci_set_state network "$ifc" ifname "$ifname"
+				[ -n "$aliases" ] && uci_set_state network "$ifc" aliases "$aliases"
+			}
+			## bitonic update, ctc add
+			. /usr/sbin/arc-ipv4-linkdown.sh $ifc
+			#umng_syslog_cli add 11 Info Wan "DHCP client deconfig WAN$((${interface:3:1}+1))"
+			arc_led.sh wan on
+			## end of bitonic update
+		;;
+		renew)
+			setup_interface update
+			## ctc add
+			umng_syslog_cli add 11 Info Wan "DHCP client renew WAN$((${interface:3:1}+1))"
+			## end of bitonic update
+		;;
+		bound)
+			setup_interface ifup
+			## bitonic update, ctc add
+			cat /proc/uptime > /tmp/ifup-time
+			. /usr/sbin/arc-ipv4-linkup.sh $ifc $ip ${subnet:-255.255.255.0} $DEFAULT_ROUTER
+			umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${interface:3:1}+1)) IP $ip subnet ${subnet:-255.255.255.0} gateway $DEFAULT_ROUTER"
+			arc_led.sh wan off
+			## end of bitonic update
+		;;
+	esac
+
+done
+
+# user rules
+[ -f /etc/udhcpc.user ] && . /etc/udhcpc.user
+
+exit 0

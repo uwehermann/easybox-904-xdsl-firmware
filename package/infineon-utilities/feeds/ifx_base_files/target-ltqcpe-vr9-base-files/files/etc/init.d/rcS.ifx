@@ -1,0 +1,63 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+if [ -r /etc/rc.d/config.sh ]; then
+	. /etc/rc.d/config.sh 2>/dev/null
+fi
+uc_rcconf() {
+	#/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	cp /etc/rc.conf.gz /ramdisk/flash/rc.conf.gz
+	/bin/gunzip /ramdisk/flash/rc.conf.gz
+
+	#if [ $? -ne 0 ]; then
+	#	echo "FLASH config file missing/corrupted!"
+	#	/bin/rm -f /ramdisk/flash/rc.conf
+	#	/usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 1
+	#	/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+	#	/bin/gunzip /ramdisk/flash/rc.conf.gz
+	#fi
+}
+
+uc_rcconf_brn() {
+	if ! [ -e /etc/config/rc.conf ]; then
+		gunzip -c /etc/rc.conf.gz > /etc/config/rc.conf
+	fi
+
+	if ! [ -e /etc/config/rc.conf ]; then
+		echo "NO /etc/config/rc.conf" > /dev/console$
+	fi
+
+	ln -sf /etc/config/rc.conf /ramdisk/flash/rc.conf
+}
+
+set_passwd() {
+	touch /ramdisk/flash/passwd
+	. /etc/rc.conf 2> /dev/null
+	i=0
+	while [ $i -lt $passFileLineCount ]
+	do
+	        eval passVar='$passFileLineCount'$i
+	        echo $passVar >> /ramdisk/flash/passwd
+	        i=`expr $i + 1`
+	done
+}
+
+run_scripts() {
+	for i in /etc/rc.d/$1*; do
+		[ -x $i ] && $i $2 2>&1
+	done
+}
+
+#LOGGER="cat"
+#[ -x /usr/bin/logger ] && LOGGER="logger -s -p 6 -t sysinit"
+
+uc_rcconf_brn
+
+#uc_rcconf
+#set_passwd
+
+#if [ "$1" = "S" ]; then
+#	run_scripts "$1" "$2"
+#else
+#	run_scripts "$1" "$2"
+#fi

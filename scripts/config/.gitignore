@@ -1,0 +1,14 @@
+*.o
+#lxdialog
+conf*
+mconf*
+mconf_check
+*.*.c
+
+lxdialog/lxdialog
+lex.backup
+
+!*.c
+!*.h
+!Makefile
+!README

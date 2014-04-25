@@ -1,0 +1,206 @@
+#!/usr/bin/env python
+# Copyright (C) WANG Cong, Apr. 2007
+# GPLv2 applies.
+#
+# command:
+#		./xylftppass add USERNAME PASSWORD
+#
+
+import sys, os
+import string
+#import md5
+
+def findline(myfile, key):
+	myfile.seek(0)
+	lines = myfile.readlines()
+	i = 1
+	for line in lines:
+		if key == line.split("::")[1]:
+			return i
+		else:
+			i+=1
+	return 0
+
+def addline(myfile, newline):
+	global default_mod
+	uids = []
+	names = []
+	maxuid = 0
+	myfile.seek(0)
+	lines = myfile.readlines()
+	for line in lines:
+		if line == '\n':
+			break
+		temp = line.split("::")
+		if not string.atoi(temp[0]) in uids:
+			uids.append(string.atoi(temp[0]))
+		if not temp[1] in names:
+			names.append(temp[1])
+	if names and (newline.split("::")[0] in names):
+		print "User has already existed!"
+		return -1
+	if uids:
+		uids.sort()
+		maxuid = uids[len(uids)-1]
+	else:
+		maxuid = 1
+	i = 0
+	for i in range(maxuid+1):
+		if i not in uids:
+			break
+	if i == maxuid:
+		i+=1
+	myfile.write("%s"%i+'::'+newline+'\n')
+	return 0
+
+def delline(myfile, num):
+	myfile.seek(0)
+	lines = myfile.readlines()
+	del lines[num-1]
+	myfile.seek(0)
+	myfile.truncate()	#Note! This is used to empty the file.
+	myfile.writelines(lines)
+	return
+
+def printline(myfile, num):
+	myfile.seek(0)
+	lines = myfile.readlines()
+	tmplist = lines[num-1].split("::")
+	del tmplist[3]
+	print string.join(tmplist, '::')
+	return
+
+def changemod(myfile, n, newmod):
+	myfile.seek(0)
+	lines = myfile.readlines()
+	tmplist = lines[n-1].split("::")
+	tmplist[2] = newmod
+	lines[n-1] = string.join(tmplist, '::')
+	myfile.seek(0)
+	myfile.truncate()
+	myfile.writelines(lines)
+	return
+
+def changepass(myfile, n, newpass):
+	myfile.seek(0)
+	lines = myfile.readlines()
+	tmplist = lines[n-1].split("::")
+	#m = md5.new()
+	#m.update(newpass)
+	#tmplist[3] = m.digest()+'\n'	#IMO, the final '\n' should be added by hand.
+	tmplist[3] = newpass+'\n'	#IMO, the final '\n' should be added by hand.
+	lines[n-1] = string.join(tmplist, '::')
+	myfile.seek(0)
+	myfile.truncate()
+	myfile.writelines(lines)
+	return
+
+def usage():
+	print ''
+	print sys.argv[0], 'add|del|show|passwd|chmod [options...]'
+	print '''
+	add $USERNAME $PASSWORD
+	del $USERNAME
+	show $USERNAME
+	passwd $USERNAME $NEWPASSWD
+	chmod $USERNAME $NEWMOD'''
+	return
+
+def main():
+	username='anonymous'
+	password=''
+	file_name='./xylftp.pass'
+	global default_mod
+	cmds = ('add', 'del', 'chmod','show', 'passwd')
+	if len(sys.argv) < 2 or not (sys.argv[1] in cmds):
+		print 'Sign... Bad usage!'
+		usage()
+		return -1
+	else:
+		try:
+			myfile = open(file_name, "rt+")
+		except:
+			print "Can't open file!"
+			return -2
+		else:
+			if sys.argv[1] == 'add':
+				if len(sys.argv) < 3:
+					print 'Bad usage!'
+					print '\'add\' command must be followed by a user name, but a password is optional.'
+					myfile.close()
+					return -1
+				else:
+					username = sys.argv[2]
+					if len(sys.argv) == 4:
+						password=sys.argv[3]
+					#m = md5.new()
+					#m.update(password)
+					#addline(myfile, username+'::'+default_mod+'::'+m.digest())
+					addline(myfile, username+'::'+default_mod+'::'+password)
+			elif sys.argv[1] == 'del':
+				if len(sys.argv) == 3:
+					username = sys.argv[2]
+				else:
+					print "Bad usage!"
+					print '\'del\' command must be followed by a user name.'
+					myfile.close()
+					return -1
+				n = findline(myfile, username)
+				if n == 0:
+					print "No such user!"
+				else:
+					delline(myfile, n)
+			elif sys.argv[1] == 'show':
+				if len(sys.argv) != 3:
+					print 'Bad usage!'
+					print '\'show\' command must be followed by a user name.'
+					myfile.close()
+					return -1
+				else:
+					n = findline(myfile, sys.argv[2])
+					if n != 0:
+						printline(myfile, n)
+					else:
+						print "No such user!"
+			elif sys.argv[1] == 'chmod':
+				if len(sys.argv) != 4:
+					print 'Bad usage!'
+					print '\'chmod\' command must be followed by a user name and the new mode.'
+					myfile.close()
+					return -1
+				else:
+					n = findline(myfile, sys.argv[2])
+					if n != 0:
+						if sys.argv[3] not in ("rw", "r-", "-w", "--"):
+							print "Invalid mode!" 
+							myfile.close()
+							return -1
+						changemod(myfile, n, sys.argv[3])
+					else:
+						print "No such user!"
+
+			elif sys.argv[1] == 'passwd':
+				if len(sys.argv) != 4:
+					print 'Bad usage!'
+					print '\'passwd\' command must be followed by a user name and the new password of it.'
+					myfile.close()
+					return -1
+				else:
+					n = findline(myfile, sys.argv[2])
+					if n != 0:
+						changepass(myfile, n, sys.argv[3])
+					else:
+						print "No such user!"
+
+			else:
+				myfile.close()
+				print "No such command."
+				return -1
+		myfile.close()
+		return 0
+
+default_mod = 'rw'
+ret = main()
+sys.exit(ret)
+
+

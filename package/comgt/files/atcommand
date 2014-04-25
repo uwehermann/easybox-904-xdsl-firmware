@@ -1,0 +1,10 @@
+opengt
+set com 9600n81
+set senddelay 0.05
+#waitquiet 1 0.2
+print "\n"
+
+send "AT^m"
+#waitfor 120 "OK","ERROR"
+get 1 "" $s
+print $s

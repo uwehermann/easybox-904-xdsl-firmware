@@ -1,0 +1,15 @@
+diff -Nur old/src/ecmh.c new/src/ecmh.c
+--- old/src/ecmh.c	2012-01-05 01:35:17.000000000 +0800
++++ new/src/ecmh.c	2012-01-05 01:35:28.000000000 +0800
+@@ -2919,7 +2919,11 @@
+ 	 * anything we want (anything ???.... anythinggg... ;)
+ 	 * This is only available on Linux though
+ 	 */
++#ifdef ECMH_SUPPORT_IPV4
+ 	g_conf->rawsocket = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_ALL));
++#else
++	g_conf->rawsocket = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IPV6));
++#endif
+ 	if (g_conf->rawsocket < 0)
+ 	{
+ 		dolog(LOG_ERR, "Couldn't allocate a RAW socket\n");

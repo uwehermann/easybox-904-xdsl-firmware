@@ -1,0 +1,177 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+### ctc ###
+if [ `/bin/grep -cw CONFIG_BASE_FILES_CO_NOR_NAND /etc/config.sh` -ge 1 ] ; then
+#	export PATH=/bin:/tmp/sbin:/sbin:/usr/bin:/usr/sbin
+	export PATH=/tmp/bin:/tmp/sbin:/tmp/usr/bin:/tmp/usr/sbin:/bin:/sbin:/usr/bin:/usr/sbin
+else
+#	export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+	export PATH=/tmp/bin:/tmp/sbin:/tmp/usr/bin:/tmp/usr/sbin:/bin:/sbin:/usr/bin:/usr/sbin
+fi
+export LD_LIBRARY_PATH=/tmp/lib:/tmp/usr/lib
+###########
+
+. /etc/diag.sh
+
+pi_ifname=
+pi_ip=192.168.1.1
+pi_broadcast=192.168.1.255
+pi_netmask=255.255.255.0
+
+fs_failsafe_ifname=
+fs_failsafe_ip=192.168.1.1
+fs_failsafe_broadcast=192.168.1.255
+fs_failsafe_netmask=255.255.255.0
+
+fs_failsafe_wait_timeout=2
+
+pi_suppress_stderr="y"
+pi_init_suppress_stderr="y"
+### ctc ###
+#pi_init_path="/bin:/sbin:/usr/bin:/usr/sbin"
+pi_init_path="/tmp/bin:/tmp/sbin:/tmp/usr/bin:/tmp/usr/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+###########
+pi_init_cmd="/sbin/init"
+
+. /etc/functions.sh
+. /lib/functions/boot.sh
+. /etc/config.sh
+
+boot_hook_init preinit_essential
+boot_hook_init preinit_main
+boot_hook_init failsafe
+boot_hook_init initramfs
+boot_hook_init preinit_mount_root
+
+for pi_source_file in /lib/preinit/*; do
+    . $pi_source_file
+done
+
+boot_run_hook preinit_essential
+
+pi_mount_skip_next=false
+pi_jffs2_mount_success=false
+pi_failsafe_net_message=false
+
+### ctc ###
+#if [ `/bin/grep -cw CONFIG_BASE_FILES_CO_NOR_NAND /etc/config.sh` -ge 1 ] ; then
+#	# pi_init_path=/tmp/sbin:${pi_init_path}
+#	mkdir /tmp/sbin
+#	if [ `grep -c ifx_nor /proc/cmdline` -ge 1 ]; then
+#		ln -s /usr/sbin/uboot_env_nor /tmp/sbin/uboot_env
+#		ln -s /usr/sbin/read_img_nor  /tmp/sbin/read_img
+#		ln -s /usr/sbin/upgrade_nor   /tmp/sbin/upgrade
+#		ln -s /usr/sbin/write_img_nor /tmp/sbin/write_img
+#	else
+#		ln -s /usr/sbin/uboot_env_nand /tmp/sbin/uboot_env
+#		ln -s /usr/sbin/read_img_nand  /tmp/sbin/read_img
+#		ln -s /usr/sbin/upgrade_nand   /tmp/sbin/upgrade
+#		ln -s /usr/sbin/write_img_nand /tmp/sbin/write_img
+#	fi
+#fi
+###########
+
+### ctc ###
+	###
+MTD_PARTS_BUILT="`/bin/grep CONFIG_UBOOT_CONFIG_MTDPARTS /etc/config.sh 2>&- | /usr/bin/cut -d '=' -f 2 | /usr/bin/cut -d '"' -f 2`"
+MTD_PARTS_UBOOT="`/usr/sbin/uboot_env --get --name mtdparts 2>&-`"
+if [ "$MTD_PARTS_UBOOT" != "$MTD_PARTS_BUILT" ] ; then
+	/usr/sbin/uboot_env --set --name mtdparts --value "$MTD_PARTS_BUILT" > /dev/console
+	/bin/echo "mtdparts in config.sh --> $MTD_PARTS_BUILT" > /dev/console
+	/bin/echo "mtdparts in uboot     --> $MTD_PARTS_UBOOT" > /dev/console
+	cat /proc/mtd > /dev/console
+	/bin/echo "====================================" > /dev/console
+	/bin/echo "  reboot due to sync MTD partitions" > /dev/console
+	/bin/echo "====================================" > /dev/console
+	/sbin/reboot -f
+fi
+	###
+
+K1_PARTITION_SZ="`/usr/sbin/uboot_env --get --name f_kernel_size 2>&-`"
+K2_PARTITION_SZ="`/usr/sbin/uboot_env --get --name f_kernel2_size 2>&-`"
+if [ -n "$K2_PARTITION_SZ" ] && [ "$K1_PARTITION_SZ" != "$K2_PARTITION_SZ" ] ; then
+	/bin/echo "update U-Boot kernel1 partition size" > /dev/console
+	/usr/sbin/uboot_env --set --name f_kernel_size --value "$K2_PARTITION_SZ" 2>&-
+fi
+RT1_PARTITION_SZ="`/usr/sbin/uboot_env --get --name f_rootfs_size 2>&-`"
+RT2_PARTITION_SZ="`/usr/sbin/uboot_env --get --name f_rootfs2_size 2>&-`"
+if [ -n "$RT2_PARTITION_SZ" ] && [ "$RT1_PARTITION_SZ" != "$RT2_PARTITION_SZ" ] ; then
+	/bin/echo "update U-Boot rtfs1 partition size" > /dev/console
+	/usr/sbin/uboot_env --set --name f_rootfs_size --value "$RT2_PARTITION_SZ" 2>&-
+fi
+
+MTD_MFGCFG="`/bin/grep -w mfgconfig /proc/mtd | /usr/bin/cut -d ':' -f 1`"
+MTD_MFGCFG=${MTD_MFGCFG:3}
+if [ -n "$MTD_MFGCFG" ] ; then
+	REBOOT_CFG="ethaddr"
+	REBOOTLESS_CFG="hw_version serial wpa_key key1_cal key2_cal key3_cal key4_cal key5_cal"
+	#
+	# hclin add to copy ubootenv data to mfg data
+	for ITEM in $REBOOTLESS_CFG ; do
+		CFG="`/usr/sbin/uboot_env --get --name $ITEM 2>&-`"
+		CFG2="`/usr/sbin/uboot_env --get --name $ITEM --mtd $MTD_MFGCFG --force 2>&-`"
+		if [ $? -ne 0 ] || [ "$CFG2" == "" -a "$CFG" != "" ] ; then
+			/bin/echo "sync mfgconfig config parmeter $ITEM to $CFG" > /dev/console
+			/usr/sbin/uboot_env --set --name $ITEM --value "$CFG" --mtd $MTD_MFGCFG --force 2>&-
+		fi
+	done	
+	for ITEM in $REBOOT_CFG ; do
+		CFG="`/usr/sbin/uboot_env --get --name $ITEM 2>&-`"
+		CFG2="`/usr/sbin/uboot_env --get --name $ITEM --mtd $MTD_MFGCFG --force 2>&-`"
+		if [ $? -ne 0 ] || [ "$CFG2" == "" -a "$CFG" != "" ] ; then
+			/bin/echo "sync mfgconfig config parmeter $ITEM to $CFG" > /dev/console
+			/usr/sbin/uboot_env --set --name $ITEM --value "$CFG" --mtd $MTD_MFGCFG --force 2>&-
+		fi
+	done	
+	# hc lin end
+	for ITEM in $REBOOTLESS_CFG ; do
+		CFG="`/usr/sbin/uboot_env --get --name $ITEM 2>&-`"
+		CFG2="`/usr/sbin/uboot_env --get --name $ITEM --mtd $MTD_MFGCFG --force 2>&-`"
+		if [ -n "$CFG2" ] && [ "$CFG" != "$CFG2" ] ; then
+			/bin/echo "sync U-Boot config parmeter $ITEM to $CFG2" > /dev/console
+			/usr/sbin/uboot_env --set --name $ITEM --value "$CFG2" 2>&-
+		fi
+	done
+	###
+	CHANGED=0
+	for ITEM in $REBOOT_CFG ; do
+		CFG="`/usr/sbin/uboot_env --get --name $ITEM 2>&-`"
+		CFG2="`/usr/sbin/uboot_env --get --name $ITEM --mtd $MTD_MFGCFG --force 2>&-`"
+		if [ -n "$CFG2" ] && [ "$CFG" != "$CFG2" ] ; then
+			/bin/echo "sync U-Boot config parmeter $ITEM to $CFG2" > /dev/console
+			/usr/sbin/uboot_env --set --name $ITEM --value "$CFG2" 2>&-
+			CHANGED=1
+		fi
+	done
+	
+	CFG_MEM=`/bin/grep CONFIG_UBOOT_CONFIG_MEM /etc/config.sh | cut -d '"' -f 2`
+	CUR_MEM=`/usr/sbin/uboot_env --get --name mem`
+	if [ -n "$CFG_MEM" ] && [ "$CFG_MEM" != "$CUR_MEM" ] ; then
+		/bin/echo "sync U-Boot config parameter mem to $CFG_MEM"
+		/usr/sbin/uboot_env --set --name mem --value $CFG_MEM 2>&-
+		CHANGED=1
+	fi
+
+	if [ $CHANGED == 1 ] ; then
+		/bin/echo "====================================" > /dev/console
+		/bin/echo "reboot due to sync U-Boot parameters" > /dev/console
+		/bin/echo "====================================" > /dev/console
+		/sbin/reboot -f
+	fi
+fi
+
+# Workaround for A05 Bootloader in 904DSL
+# f_rootfs2_end had a typo to 0x1F6FFFFF
+# We just modified it to the correct one. 0x1F9FFFFF
+# This Workaround should be removed after A0.6 is released
+BL_VERSION=`/usr/sbin/uboot_env --get --name bl_version | cut -d ' ' -f 2`
+F_END_ROOTFS2=`/usr/sbin/uboot_env --get --name f_rootfs2_end`
+if [ "$CONFIG_ARC_VODAFONE_904DSL" == 1 ] && [ "$BL_VERSION" == "2010.06-Lv2.0.40-A0.5" ] && [ "$F_END_ROOTFS2" == "0x1F6FFFFF" ]; then
+	/usr/sbin/uboot_env --set --name f_rootfs2_end --value '0x1F9FFFFF' 2>&-
+fi
+###########
+
+boot_run_hook preinit_main
+

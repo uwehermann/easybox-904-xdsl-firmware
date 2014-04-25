@@ -1,0 +1,695 @@
+--- ./systemv/Makefile~	2011-12-15 14:46:08.910866849 +0800
++++ ./systemv/Makefile	2011-12-15 14:47:49.320774972 +0800
+@@ -16,10 +16,10 @@
+ include ../Makedefs
+ 
+ TARGETS	=	cancel cupsaccept cupsaddsmb cupsctl cupstestdsc cupstestppd \
+-		lp lpadmin lpinfo lpmove lpoptions lppasswd lpstat
++		lp lpadmin lpinfo lpmove lpoptions lppasswd lpstat lpautoadd
+ OBJS	=	cancel.o cupsaccept.o cupsaddsmb.o cupsctl.o cupstestdsc.o \
+ 		cupstestppd.o lp.o lpadmin.o lpinfo.o lpmove.o lpoptions.o \
+-		lppasswd.o lpstat.o
++		lppasswd.o lpstat.o lpautoadd.o
+ 
+ 
+ #
+@@ -105,6 +105,7 @@ install-exec:
+ 	$(INSTALL_BIN) lp $(BINDIR)
+ 	$(INSTALL_BIN) lpoptions $(BINDIR)
+ 	$(INSTALL_BIN) lpstat $(BINDIR)
++	$(INSTALL_BIN) lpautoadd $(BINDIR)
+ 	$(INSTALL_BIN) lppasswd $(BINDIR)
+ 	if test "x$(SYMROOT)" != "x"; then \
+ 		$(INSTALL_DIR) $(SYMROOT); \
+@@ -140,6 +141,7 @@ uninstall:
+ 	$(RM) $(BINDIR)/lpoptions
+ 	$(RM) $(BINDIR)/lppasswd
+ 	$(RM) $(BINDIR)/lpstat
++	$(RM) $(BINDIR)/lpautoadd
+ 	-$(RMDIR) $(BINDIR)
+ 	$(RM) $(SBINDIR)/accept
+ 	$(RM) $(SBINDIR)/cupsaccept
+@@ -280,6 +282,12 @@ lpstat:	lpstat.o ../cups/$(LIBCUPS)
+ 	echo Linking $@...
+ 	$(CC) $(LDFLAGS) -o lpstat lpstat.o $(LIBS)
+ 
++#
++# lpautoadd
++#
++lpautoadd:	lpautoadd.o ../Makedefs ../cups/$(LIBCUPS) 
++	echo Linking $@...
++	$(CC) $(LDFLAGS) -o $@ lpautoadd.o $(LIBS)
+ 
+ #
+ # Dependencies...
+--- /dev/null	2011-12-15 03:54:29.979341898 +0800
++++ ./systemv/lpautoadd.c	2011-12-17 21:31:18.411863583 +0800
+@@ -0,0 +1,648 @@
++
++#include <cups/adminutil.h>
++#include <cups/file.h>
++#include <errno.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <sys/wait.h>
++#include <limits.h>
++#include <stdio.h>
++
++#define SUPPORT_MODIFY 0
++#define SUPPORT_UPLOAD 0
++#define STR_LEN 128
++#define MAX_PRINTER 1
++
++
++char glb_device_uri[MAX_PRINTER][HTTP_MAX_URI];
++char glb_printer_info[MAX_PRINTER][HTTP_MAX_URI];
++char glb_existed_prs[MAX_PRINTER][HTTP_MAX_URI];
++int  glb_existed_prs_cnt;
++
++/* Return the number of new printer found
++ * Fill the global variables */
++	static int 
++do_find_printers(http_t *http)
++{
++	ipp_t		*request,		/* IPP request */
++			*response;		/* IPP response */
++	ipp_attribute_t *attr;		/* IPP attribute */
++	int 		printer_idx = 0;
++
++
++	/*
++	 * Get the list of printers and their devices...
++	 */
++
++	request = ippNewRequest(CUPS_GET_PRINTERS);
++
++	ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_KEYWORD,
++			"requested-attributes", NULL, "device-uri");
++
++	ippAddInteger(request, IPP_TAG_OPERATION, IPP_TAG_ENUM, "printer-type",
++			CUPS_PRINTER_LOCAL);
++	ippAddInteger(request, IPP_TAG_OPERATION, IPP_TAG_ENUM, "printer-type-mask",
++			CUPS_PRINTER_LOCAL);
++
++	if ((response = cupsDoRequest(http, request, "/")) != NULL)
++	{
++		/*
++		 * Got the printer list, now load the devices...
++		 */
++
++		int		i;			/* Looping var */
++		cups_array_t *printer_devices;	/* Printer devices for local printers */
++		char	*printer_device;	/* Current printer device */
++
++
++		/*
++		 * Allocate an array and copy the device strings...
++		 */
++
++		printer_devices = cupsArrayNew((cups_array_func_t)strcmp, NULL);
++
++		for (attr = ippFindAttribute(response, "device-uri", IPP_TAG_URI);
++				attr;
++				attr = ippFindNextAttribute(response, "device-uri", IPP_TAG_URI))
++		{
++			cupsArrayAdd(printer_devices, _cupsStrAlloc(attr->values[0].string.text));
++		}
++
++		ippDelete(response);
++
++		/* Get existed printer name */
++		request = ippNewRequest(CUPS_GET_PRINTERS);
++
++		ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_KEYWORD,
++				"requested-attributes", NULL, "printer-name");
++
++		ippAddInteger(request, IPP_TAG_OPERATION, IPP_TAG_ENUM, "printer-type",
++				CUPS_PRINTER_LOCAL);
++		ippAddInteger(request, IPP_TAG_OPERATION, IPP_TAG_ENUM, "printer-type-mask",
++				CUPS_PRINTER_LOCAL);
++
++		i = 0;
++		if ((response = cupsDoRequest(http, request, "/")) != NULL)
++		{
++			for (attr = ippFindAttribute(response, "printer-name", IPP_TAG_NAME);
++					attr != NULL;
++					attr = ippFindNextAttribute(response, "printer-name", IPP_TAG_NAME)
++			    )
++			{
++				strlcpy(glb_existed_prs[i], attr->values[0].string.text, HTTP_MAX_URI);
++				glb_existed_prs_cnt++;
++			}
++		}
++
++		/*
++		 * Free the printer list and get the device list...
++		 */
++
++		ippDelete(response);
++
++		request = ippNewRequest(CUPS_GET_DEVICES);
++
++		if ((response = cupsDoRequest(http, request, "/")) != NULL)
++		{
++			/*
++			 * Got the device list, let's parse it...
++			 */
++
++			const char *device_uri,		/* device-uri attribute value */
++			      *device_make_and_model,	/* device-make-and-model value */
++			      *device_info;		/* device-info value */
++
++
++			for (i = 0, attr = response->attrs; attr; attr = attr->next)
++			{
++				/*
++				 * Skip leading attributes until we hit a device...
++				 */
++
++				while (attr && attr->group_tag != IPP_TAG_PRINTER)
++					attr = attr->next;
++
++				if (!attr)
++					break;
++
++				/*
++				 * Pull the needed attributes from this device...
++				 */
++
++				device_info           = NULL;
++				device_make_and_model = NULL;
++				device_uri            = NULL;
++
++				while (attr && attr->group_tag == IPP_TAG_PRINTER)
++				{
++					if (!strcmp(attr->name, "device-info") &&
++							attr->value_tag == IPP_TAG_TEXT)
++						device_info = attr->values[0].string.text;
++
++					if (!strcmp(attr->name, "device-make-and-model") &&
++							attr->value_tag == IPP_TAG_TEXT)
++						device_make_and_model = attr->values[0].string.text;
++
++					if (!strcmp(attr->name, "device-uri") &&
++							attr->value_tag == IPP_TAG_URI)
++						device_uri = attr->values[0].string.text;
++
++
++					attr = attr->next;
++				}
++
++				/*
++				 * printf("qmchen device found: device-info: %s, device-make-and-model: %s, device-uri: %s\n", device_info, device_make_and_model, device_uri);
++				 *
++				 */
++				/*
++				 * See if we have everything needed...
++				 */
++
++				if (device_info && device_make_and_model && device_uri &&
++						strcasecmp(device_make_and_model, "unknown") &&
++						!strncmp(device_uri, "usb:", 4) && strchr(device_uri, ':'))
++				{
++					/*
++					 * Yes, now see if there is already a printer for this
++					 * device...
++					 */
++
++					/*	printf("qmchen USB device: device-info: %s, device-make-and-model: %s, device-uri: %s!!!!!!!!\n", device_info, device_make_and_model, device_uri); */
++					if (!cupsArrayFind(printer_devices, (void *)device_uri))
++					{
++						/*
++						 * Not found, so it must be a new printer...
++						 */
++
++						char	option[1024],	/* Form variables for this device */
++							*option_ptr;	/* Pointer into string */
++						const char	*ptr;		/* Pointer into device string */
++
++
++						/*
++						 * Format the printer name variable for this device...
++						 *
++						 * We use the device-info string first, then device-uri,
++						 * and finally device-make-and-model to come up with a
++						 * suitable name.
++						 */
++
++						if (strncasecmp(device_info, "unknown", 7))
++							ptr = device_info;
++						else if ((ptr = strstr(device_uri, "://")) != NULL)
++							ptr += 3;
++						else
++							ptr = device_make_and_model;
++
++						for (option_ptr = option;
++								option_ptr < (option + sizeof(option) - 1) && *ptr;
++								ptr ++)
++							if (isalnum(*ptr & 255) || *ptr == '_' || *ptr == '-' ||
++									*ptr == '.')
++								*option_ptr++ = *ptr;
++							else if ((*ptr == ' ' || *ptr == '/') && option_ptr[-1] != '_')
++								*option_ptr++ = '_';
++							else if (*ptr == '?' || *ptr == '(')
++								break;
++
++						*option_ptr = '\0';
++
++
++						/*
++						 * Finally, set the form variables for this printer...
++						 */
++
++						//cgiSetArray("device_info", i, device_info);
++						//cgiSetArray("device_make_and_model", i, device_make_and_model);
++						//cgiSetArray("device_uri", i, device_uri);
++						i ++;
++						printf("Find new printer: device-info: %s, device-make-and-model: %s, device-uri: %s\n", device_info, device_make_and_model, device_uri);
++						if(printer_idx < MAX_PRINTER)
++						{
++							strlcpy(glb_device_uri[printer_idx], device_uri, HTTP_MAX_URI);
++							strlcpy(glb_printer_info[printer_idx++], device_info, STR_LEN);
++						} else {
++							break;
++						}
++					}
++				}
++
++				if (!attr)
++					break;
++			}
++
++			ippDelete(response);
++
++			/*
++			 * Free the device list...
++			 */
++
++			for (printer_device = (char *)cupsArrayFirst(printer_devices);
++					printer_device;
++					printer_device = (char *)cupsArrayNext(printer_devices))
++				_cupsStrFree(printer_device);
++
++			cupsArrayDelete(printer_devices);
++		}
++	}
++	return printer_idx;
++
++}
++
++/*
++ * 'do_am_printer()' - Add or modify a printer.
++ * Currently, modify is not supported.
++ * Return number of printer added, -1 for error.
++ */
++
++	static int 
++do_am_printer(http_t *http,		/* I - HTTP connection */
++		int    modify,		/* I - Modify the printer? */
++		int    idx)		/* I - the printer index */
++{
++	int		i;			/* Looping var */
++	ipp_attribute_t *attr;		/* Current attribute */
++	ipp_t		*request,		/* IPP request */
++			*response;		/* IPP response */
++	const char	*var;			/* CGI variable */
++	char		uri[HTTP_MAX_URI],	/* Device or printer URI */
++			*uriptr;		/* Pointer into URI */
++	const char	*name,			/* Pointer to class name */
++	      *ptr;			/* Pointer to CGI variable */
++	char template_name[STR_LEN] = {0};
++	char current_make[STR_LEN] = {0};
++	char ppd_make[STR_LEN] = {0};
++	char current_make_and_model[STR_LEN] = {0};
++	char ppd[STR_LEN] = {0};			/* PPD name for the printer */
++
++
++	//ptr = //cgiGetVariable("glb_device_uri");
++	ptr = glb_device_uri[idx];
++	fprintf(stderr, "DEBUG: do_am_printer: glb_device_uri=\"%s\"\n",
++			ptr ? ptr : "(null)");
++
++
++	if ((var = uriptr = glb_printer_info[idx]) != NULL)
++	{
++		{
++			/*
++			 * Extract make and make/model from device URI string...
++			 */
++
++			char	make[1024],		/* Make string */
++				*makeptr;		/* Pointer into make */
++
++
++			//uriptr = var;
++
++			strlcpy(make, uriptr, sizeof(make));
++
++			if ((makeptr = strchr(make, ' ')) != NULL)
++				*makeptr = '\0';
++			else if ((makeptr = strchr(make, '-')) != NULL)
++				*makeptr = '\0';
++			else if (!strncasecmp(make, "laserjet", 8) ||
++					!strncasecmp(make, "deskjet", 7) ||
++					!strncasecmp(make, "designjet", 9))
++				strcpy(make, "HP");
++			else if (!strncasecmp(make, "phaser", 6))
++				strcpy(make, "Xerox");
++			else if (!strncasecmp(make, "stylus", 6))
++				strcpy(make, "Epson");
++			else
++				strcpy(make, "Generic");
++
++			strcpy(current_make, make);
++
++			strcpy(ppd_make, make);
++
++			strcpy(current_make_and_model, uriptr);
++			{
++				char	template[128],		/* Template name */
++					*tptr;			/* Pointer into template name */
++
++				strcpy(uriptr, glb_printer_info[idx]);
++
++				for (tptr = template;
++						tptr < (template + sizeof(template) - 1) && *uriptr;
++						uriptr ++)
++					if (isalnum(*uriptr & 255) || *uriptr == '_' || *uriptr == '-' ||
++							*uriptr == '.')
++						*tptr++ = *uriptr;
++					else if ((*uriptr == ' ' || *uriptr == '/') && tptr > template &&
++							tptr[-1] != '_')
++						*tptr++ = '_';
++					else if (*uriptr == '?' || *uriptr == '(')
++						break;
++
++				*tptr = '\0';
++
++				strcpy(template_name, template);
++				printf("current_make: %s, current_make_and_model %s, template_name %s\n", make, current_make_and_model, template_name);
++			}
++		}
++	}
++	{
++
++		/*
++		 * Build a CUPS_GET_PPDS request, which requires the following
++		 * attributes:
++		 *
++		 *    attributes-charset
++		 *    attributes-natural-language
++		 *    printer-uri
++		 */
++
++		request = ippNewRequest(CUPS_GET_PPDS);
++
++		ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_URI, "printer-uri",
++				NULL, "ipp://localhost/printers/");
++
++		if (strlen(current_make) == 0)
++			var = ppd_make;
++		else
++			var = current_make;
++		if (var)
++		{
++			const char *make_model;		/* Make and model */
++
++
++			ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_TEXT,
++					"ppd-make", NULL, var);
++
++			if (strlen(current_make_and_model) != 0) {
++				make_model = current_make_and_model;
++				ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_TEXT,
++						"ppd-make-and-model", NULL, make_model);
++			}
++		}
++		else
++			ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_KEYWORD,
++					"requested-attributes", NULL, "ppd-make");
++
++		/*
++		 * Do the request and get back a response...
++		 */
++
++		if ((response = cupsDoRequest(http, request, "/")) != NULL)
++		{
++			const char	*ppd_device_id,		/* Pointer to ppd-device-id */
++			      *ppd_language,		/* Pointer to ppd-natural-language */
++			      *ppd_name,		/* Pointer to ppd-name */
++			      *ppd_make_model;	/* Pointer to ppd-make-and-model */
++			if (response->request.status.status_code > IPP_OK_CONFLICT)
++			{
++				printf(" %s\n", cupsLastErrorString());
++				ippDelete(response);
++				return -1;
++			}
++			/*
++			 * Got the list of PPDs, see if the user has selected a make...
++			 */
++			for (attr = response->attrs; attr != NULL; attr = attr->next)
++			{
++				/*
++				 * Skip leading attributes until we hit a PPD...
++				 */
++
++				while (attr != NULL && attr->group_tag != IPP_TAG_PRINTER)
++					attr = attr->next;
++
++				if (attr == NULL)
++					break;
++
++				/*
++				 * Pull the needed attributes from this PPD...
++				 */
++
++				ppd_device_id  = "NONE";
++				ppd_language   = NULL;
++				ppd_make_model = NULL;
++				ppd_name       = NULL;
++
++				while (attr != NULL && attr->group_tag == IPP_TAG_PRINTER)
++				{
++					if (!strcmp(attr->name, "ppd-device-id") &&
++							attr->value_tag == IPP_TAG_TEXT)
++						ppd_device_id = attr->values[0].string.text;
++					else if (!strcmp(attr->name, "ppd-natural-language") &&
++							attr->value_tag == IPP_TAG_LANGUAGE)
++						ppd_language = attr->values[0].string.text;
++					else if (!strcmp(attr->name, "ppd-make-and-model") &&
++							attr->value_tag == IPP_TAG_TEXT)
++						ppd_make_model = attr->values[0].string.text;
++					else if (!strcmp(attr->name, "ppd-name") &&
++							attr->value_tag == IPP_TAG_NAME)
++						ppd_name = attr->values[0].string.text;
++
++					attr = attr->next;
++				}
++
++				/*
++				 * See if we have everything needed...
++				 */
++
++				if (ppd_language == NULL || ppd_make_model == NULL || ppd_name == NULL)
++				{
++					if (attr == NULL)
++						break;
++					else
++						continue;
++				}
++
++
++				/* See if the ppd file is found */
++				if((char *)strcasestr(ppd_make_model, current_make_and_model) != NULL)
++				{
++					printf("Model:  name = %s\n"
++							"        natural_language = %s\n"
++							"        make-and-model = %s\n"
++							"        device-id = %s\n",
++							ppd_name, ppd_language, ppd_make_model, ppd_device_id);
++					strlcpy(ppd, ppd_name, sizeof(ppd));
++					break;
++				}
++				if (attr == NULL)
++					break;
++			}
++
++
++			ippDelete(response);
++		}
++		else
++		{
++			printf("Unable to find the driver\n");
++		}
++	}
++	if(strlen(ppd) != 0)
++	{
++		/*
++		 * Find a suitable PPD.
++		 * Build a CUPS_ADD_PRINTER request, which requires the following
++		 * attributes:
++		 *
++		 *    attributes-charset
++		 *    attributes-natural-language
++		 *    printer-uri
++		 *    printer-location
++		 *    printer-info
++		 *    ppd-name
++		 *    device-uri
++		 *    printer-is-accepting-jobs
++		 *    printer-is-shared
++		 *    printer-state
++		 */
++
++		request = ippNewRequest(CUPS_ADD_PRINTER);
++
++		httpAssembleURIf(HTTP_URI_CODING_ALL, uri, sizeof(uri), "ipp", NULL,
++				"localhost", 0, "/printers/%s",
++				template_name);
++		ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_URI, "printer-uri",
++				NULL, uri);
++
++		ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_TEXT, "printer-location",
++				NULL, "Router");
++
++		ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_TEXT, "printer-info",
++				NULL, glb_printer_info[idx]);
++
++		{
++			var = ppd;
++			ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_NAME, "ppd-name",
++					NULL, var);
++		}
++
++		//strlcpy(uri, glb_device_uri, sizeof(uri));
++
++		/*
++		 * Strip make and model from URI...
++		 */
++
++		//if ((uriptr = strrchr(uri, '|')) != NULL)
++		//*uriptr = '\0';
++
++
++		ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_URI, "device-uri",
++				NULL, glb_device_uri[idx]);
++
++		ippAddBoolean(request, IPP_TAG_PRINTER, "printer-is-accepting-jobs", 1);
++
++		ippAddBoolean(request, IPP_TAG_PRINTER, "printer-is-shared", 1);
++
++		ippAddInteger(request, IPP_TAG_PRINTER, IPP_TAG_ENUM, "printer-state",
++				IPP_PRINTER_IDLE);
++
++		/*
++		 * Do the request and get back a response...
++		 */
++
++		ippDelete(cupsDoRequest(http, request, "/"));
++
++		if (cupsLastError() == IPP_NOT_AUTHORIZED)
++		{
++			puts("Status: 401\n");
++			return(0);
++		}
++		else if (cupsLastError() > IPP_OK_CONFLICT)
++		{
++			printf("Unable to add printer");
++			return -1;
++		}
++		else
++		{
++			return 1;
++		}
++	}
++	return 0;
++}
++/*
++ * 'delete_printer()' - Delete a printer from the system...
++ */
++
++	static int				/* O - 0 on success, 1 on fail */
++delete_printer(http_t *http,		/* I - Server connection */
++		char   *printer)		/* I - Printer to delete */
++{
++	ipp_t		*request,		/* IPP Request */
++			*response;		/* IPP Response */
++	char		uri[HTTP_MAX_URI];	/* URI for printer/class */
++
++
++	printf("delete_printer(%p, \"%s\")\n", http, printer);
++
++	/*
++	 * Build a CUPS_DELETE_PRINTER request, which requires the following
++	 * attributes:
++	 *
++	 *    attributes-charset
++	 *    attributes-natural-language
++	 *    printer-uri
++	 */
++
++	request = ippNewRequest(CUPS_DELETE_PRINTER);
++
++	httpAssembleURIf(HTTP_URI_CODING_ALL, uri, sizeof(uri), "ipp", NULL,
++			"localhost", 0, "/printers/%s", printer);
++	ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_URI,
++			"printer-uri", NULL, uri);
++
++	/*
++	 * Do the request and get back a response...
++	 */
++
++	if ((response = cupsDoRequest(http, request, "/")) == NULL)
++	{
++		fprintf(stderr, "lpautoadd: %s\n", cupsLastErrorString());
++
++		return (1);
++	}
++	else if (response->request.status.status_code > IPP_OK_CONFLICT)
++	{
++		fprintf(stderr, "lpautoadd: %s\n", cupsLastErrorString());
++
++		ippDelete(response);
++
++		return (1);
++	}
++	else
++	{
++		ippDelete(response);
++
++		return (0);
++	}
++}
++
++int main(void)
++{
++	http_t *http;
++	int num;
++	int i;
++	int cnt_exceed;
++	int added;
++	int ret;
++
++	http = (http_t *) _cupsConnect();
++	if(http == NULL)
++	{
++		fprintf(stderr, "Failed to get the CUPS connection\n");
++		return -1;
++	}
++	num = do_find_printers(http);
++
++	added = 0;
++	for(i = 0; i < num; i++)
++	{
++		ret = do_am_printer(http, 0, i);
++		if(ret > 0) added += ret;
++	}
++
++	cnt_exceed = added + glb_existed_prs_cnt - MAX_PRINTER;
++	printf("glb_existed_prs_cnt %d, glb_existed_prs: %s\n", glb_existed_prs_cnt, glb_existed_prs[0]);
++	for(i = 0; i < cnt_exceed; i++)
++		delete_printer(http, glb_existed_prs[i]);
++
++	return 0;
++}
++

@@ -1,0 +1,25 @@
+#!/bin/sh
+
+resolve_file=/var/resolv.conf
+named_conf=/var/etc/bind/named.conf
+
+WANIF=`wandataif.sh`
+
+if [ "${WANIF}" == "${IFNAME}" ]; then 
+	echo "$DNS1 $DNS2" > /tmp/dynamic_dns_ip
+fi
+
+resolv_update.sh $IFNAME $DNS1 $DNS2
+
+if [ -f ${resolve_file}.auto ]; then
+    set -- $(cat ${resolve_file} ${resolve_file}.auto | uniq | awk 'BEGIN { ns=""; FS=" "; } /nameserver/ { if( $2 != "127.0.0.1" ) { ns=sprintf("%s %s;", ns, $2); } } END { print ns; }')
+else
+    set -- $(cat ${resolve_file} | uniq | awk 'BEGIN { ns=""; FS=" "; } /nameserver/ { if( $2 != "127.0.0.1" ) { ns=sprintf("%s %s;", ns, $2); } } END { print ns; }')    
+fi
+nss=$@
+
+grep -q $nss $named_conf
+[ "$?" -eq "1" ] && {
+    /etc/init.d/named restart
+}
+

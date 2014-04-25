@@ -1,0 +1,171 @@
+#!/bin/sh
+
+# START=02
+
+start_ethsw() {
+		# MDC_CFG_0_REG
+	switch_utility RegisterSet 0xc4B 0x3F
+		# MDC_CFG_1_REG
+	switch_utility RegisterSet 0xc4C 0x8105
+	sleep 1
+		# PHY_ADDR_0
+	switch_utility RegisterSet 0xc53 0x1810
+		# PHY_ADDR_1
+	switch_utility RegisterSet 0xc53 0x1810
+		# PHY_ADDR_2
+	switch_utility RegisterSet 0xc53 0x1811
+		# PHY_ADDR_3
+	switch_utility RegisterSet 0xC52 0x1812
+		# PHY_ADDR_4
+	switch_utility RegisterSet 0xc51 0x1813
+		# PHY_ADDR_5
+	switch_utility RegisterSet 0xC50 0x1814
+		# MAC_0_CTRL_0
+	switch_utility RegisterSet 0x903 0x180
+		# MAC_1_CTRL_0
+	switch_utility RegisterSet 0x90F 0x180
+		# MAC_5_CTRL_0
+	switch_utility RegisterSet 0x93F 0x180
+		# MAC_2_CTRL_0
+	switch_utility RegisterSet 0x91B 0x180
+		# MAC_4_CTRL_0
+	switch_utility RegisterSet 0x933 0x180
+		# MAC_3_CTRL_0
+	switch_utility RegisterSet 0x927 0x180
+		# MAC_6_CTRL_0
+	switch_utility RegisterSet 0x94B 0x180
+		# port link setting
+	switch_utility PortLinkCfgSet 0 0 0 0 4 0 0 4 0
+	switch_utility PortLinkCfgSet 1 0 0 0 4 0 0 4 0
+	switch_utility PortLinkCfgSet 5 0 0 0 4 0 0 1 0
+	switch_utility PortLinkCfgSet 2 0 0 0 4 0 0 1 0
+	switch_utility PortLinkCfgSet 3 0 0 0 4 0 0 1 0
+	switch_utility PortLinkCfgSet 4 0 0 0 4 0 0 1 0
+		# MII_PCDU_0_REG
+	switch_utility RegisterSet 0xc77 0xc001
+		# MII_PCDU_1_REG
+	switch_utility RegisterSet 0xc79 0xc001
+		# MII_PCDU_5_REG
+	switch_utility RegisterSet 0xc81 0xc001
+	sleep 1
+}
+
+start_preAlpha() {
+	mount /dev/mtdblock1 /firmware
+
+	mknod /dev/ifx_mei c 105 0
+	mknod /dev/dsl_cpe_api c 107 0
+	mknod /dev/ifx_ppa c 181 0
+	chmod 777 /dev/ifx_mei /dev/dsl_cpe_api /dev/ifx_ppa
+	#chmod 777 /dev/dsl_cpe_api
+}
+
+start_Alpha() {
+	FIRMWARE_PATH=/firmware
+	
+	if ! [ "$CONFIG_UBOOT_CONFIG_FIRMWARE_IN_ROOTFS" = "1" ]; then
+	  if [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "sqlz" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount $FIRMWARE_PATH
+       	  elif [ "`/bin/dd if=/dev/mtd1 bs=4 count=1`" = "qshs" ] ; then
+		echo "Mount ADSL Firmware Now"
+		/bin/mount $FIRMWARE_PATH
+	  else
+		echo " ADSL Firmware Not Found"
+	  fi
+	fi
+#	/sbin/ifconfig lo 127.0.0.1 netmask 255.0.0.0
+
+#	echo 1 > /proc/sys/net/ipv4/ip_forward
+
+#	echo "127.0.0.1	localhost.localdomain localhost" > /etc/hosts
+
+#	[ `mount|grep -q nfs;echo $?` -eq  0 ] || /sbin/ifconfig eth0 0.0.0.0 up
+#	[ `mount|grep -q nfs;echo $?` -eq  0 ] || /sbin/ifconfig eth1 0.0.0.0 up
+#	syslogd
+#	br2684ctld
+#	load_modules /etc/modules.d/*
+
+	/bin/cp -f /etc/ath/apcfg_ram /tmp/.apcfg
+
+}
+
+start_Beta() {
+	FIRMWARE_PATH=/firmware
+	
+	if ! [ "$CONFIG_UBOOT_CONFIG_FIRMWARE_IN_ROOTFS" = "1" ]; then
+	  if [ "`/bin/dd if=/dev/mtd1 bs=4 count=1 2>/dev/null`" = "sqlz" ] ; then
+		#echo "Mount ADSL Firmware Now"
+		/bin/mount $FIRMWARE_PATH
+       	  elif [ "`/bin/dd if=/dev/mtd1 bs=4 count=1 2>/dev/null`" = "qshs" ] ; then
+		#echo "Mount ADSL Firmware Now"
+		/bin/mount $FIRMWARE_PATH
+	  else
+		echo " ADSL Firmware Not Found"
+	  fi
+	fi
+
+#	[ `mount|grep -q nfs;echo $?` -eq  0 ] || /sbin/ifconfig eth0 0.0.0.0 up
+#	if [ -n "$CONFIG_TARGET_IFXCPE_PLATFORM_AR9_NONE" -a "$CONFIG_TARGET_IFXCPE_PLATFORM_AR9_NONE" = "1" -o -n "$CONFIG_TARGET_IFXCPE_PLATFORM_VR9_NONE" -a "$CONFIG_TARGET_IFXCPE_PLATFORM_VR9_NONE" = "1" ]; then
+#		[ `mount|grep -q nfs;echo $?` -eq  0 ] || /sbin/ifconfig eth1 0.0.0.0 up
+#	fi
+#	br2684ctld
+#	load_modules /etc/modules.d/*
+	cd /tmp
+	chmod 777 .
+
+	#extract rc.conf
+#	/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+#	/bin/gunzip /ramdisk/flash/rc.conf.gz 2>/dev/null
+#	if [ $? -ne 0 ]; then
+#		#echo "Upgrading with default configuration!"
+#		/bin/rm -f /ramdisk/flash/rc.conf
+#		/usr/sbin/upgrade /etc/rc.conf.gz sysconfig 0 1 2>/dev/null
+#		/usr/sbin/read_img sysconfig /ramdisk/flash/rc.conf.gz
+#		/bin/gunzip /ramdisk/flash/rc.conf.gz
+#	fi
+	if ! [ -e "/etc/config/rc.conf" ]; then
+		cd /etc/config; /bin/gunzip /etc/rc.conf.gz; cd /
+	fi
+
+	if [ "`grep "@@@@@CERTSTART@@@@@" /etc/config/rc.conf`" ]; then
+		if [ "`grep "BEGIN CERTIFICATE" /etc/config/rc.conf`" ]; then
+			sed -n -e '/@@@@@CERTSTART@@@@@/,$p' /etc/config/rc.conf > /tmp/lower.txt
+			sed -n -e '1,/@@@@@CERTSTART@@@@@/p' /etc/config/rc.conf > /tmp/sed_upper.txt
+			sed '/@@@@@CERTSTART@@@@@/d' /tmp/sed_upper.txt > /tmp/upper.txt
+			sed '/@@@@@CERTSTART@@@@@/d' /tmp/lower.txt > /tmp/lower1.txt
+#			mv /tmp/lower1.txt /flash/Cert.pem
+#			mv /tmp/upper.txt /flash/rc.conf
+			mv /tmp/lower1.txt /etc/config/Cert.pem
+			mv /tmp/upper.txt /etc/config/rc.conf
+			rm -rf /tmp/sed_upper.txt /tmp/lower.txt
+		else
+#			sed '/@@@@@CERTSTART@@@@@/d' /flash/rc.conf > /tmp/rc.conf.tmp
+#			mv /tmp/rc.conf.tmp /flash/rc.conf
+			sed '/@@@@@CERTSTART@@@@@/d' /etc/config/rc.conf > /tmp/rc.conf.tmp
+			mv /tmp/rc.conf.tmp /etc/config/rc.conf
+		fi
+	fi
+
+}
+
+
+FW_ADDR=`uboot_env --get --name f_firmware_addr`
+PARTS=`uboot_env --get --name total_part`
+if [ -n "$FW_ADDR" ] && [ -n "$PARTS" ] && [ "$FW_ADDR" != "parameter f_firmware_addr is not existed" ] ; then
+	CNT=0
+	while [ "$CNT" -lt "$PARTS" ] ; do
+		PART_ADDR=`uboot_env --get --name part${CNT}_begin`
+		if [ `printf %u $FW_ADDR` -eq `printf %u $PART_ADDR` ] ; then
+			mount /dev/mtdblock$CNT /firmware
+			break
+		fi
+		let CNT=$CNT+1
+	done
+fi
+
+# /usr/sbin/setup_netdev.sh port-disable
+
+start_Beta
+
+# start_ethsw

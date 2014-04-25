@@ -1,0 +1,20 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org 
+
+START=99
+start() {
+	[ -f /etc/sysctl.conf ] && sysctl -p -e >&-
+}
+
+
+case "$1" in
+	"boot")		start & ;;
+	"start")	start & ;;
+#	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start Sysctl function'
+				echo $0 'start - start Sysctl function'
+#				echo $0 'stop  - stop Sysctl function'
+				;;
+esac
+

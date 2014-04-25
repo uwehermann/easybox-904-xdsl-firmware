@@ -1,0 +1,599 @@
+#!/bin/sh
+
+rm -Rf /tmp/nas
+rm -Rf /tmp/nas2
+rm -Rf /tmp/webdav
+rm -Rf /tmp/passwd.dat
+rm -Rf /tmp/passwd1.dat
+
+DRV_STAT_PATH="/tmp/fs"
+DRV_STAT_FILE="${DRV_STAT_PATH}/drvstat"
+VOL_INFO_FILE="${DRV_STAT_PATH}/volinfo"
+REALM="webdav"
+
+WEBDAV_CFG_DIR="/tmp"
+WEBDAV_PWD_FILE="$WEBDAV_CFG_DIR/passwd.dat"
+WEBDAV_PWD_FILE1="$WEBDAV_CFG_DIR/passwd1.dat"
+
+mkdir -m 0755 -p /tmp/nas
+mkdir -m 0755 -p /tmp/nas2
+mkdir -m 0755 -p /tmp/webdav
+
+webdav_disk_online_check()
+{
+	local DRIVE_ID
+
+	DRIVE_ID=0
+
+	ONLINE1=`ccfg_cli -f "$DRV_STAT_FILE" get online1@drive`
+	VENDOR1=`ccfg_cli -f "$DRV_STAT_FILE" get vendor1@drive`
+	MODEL1=`ccfg_cli -f "$DRV_STAT_FILE" get model1@drive`
+	SERIAL_NUM1=`ccfg_cli -f "$DRV_STAT_FILE" get serial_num1@drive`
+	DEVNAME1=`ccfg_cli -f "$DRV_STAT_FILE" get devname1@drive`
+
+	ONLINE2=`ccfg_cli -f "$DRV_STAT_FILE" get online2@drive`
+	VENDOR2=`ccfg_cli -f "$DRV_STAT_FILE" get vendor2@drive`
+	MODEL2=`ccfg_cli -f "$DRV_STAT_FILE" get model2@drive`
+	SERIAL_NUM2=`ccfg_cli -f "$DRV_STAT_FILE" get serial_num2@drive`
+	DEVNAME2=`ccfg_cli -f "$DRV_STAT_FILE" get devname2@drive`
+
+	echo $ONLINE1 $VENDOR1 $MODEL1 $DEVNAME1> /dev/console
+	echo $ONLINE2 $VENDOR2 $MODEL2 $DEVNAME2> /dev/console
+
+	MAX_DRIVE=`ccfg_cli get max_drive@drive`
+
+	while [ "${DRIVE_ID}" -lt "${MAX_DRIVE}" ];
+	do
+		DRV_DATA=`ccfg_cli get webdav_disk${DRIVE_ID}@drive`
+
+		#echo DRV_DATA = $DRV_DATA > /dev/console
+		online=`echo "$DRV_DATA"  | cut -d ':' -f 1`
+		enable_sharing=`echo "$DRV_DATA"  | cut -d ':' -f 2`
+		share_all_folder=`echo "$DRV_DATA"  | cut -d ':' -f 3`
+		vendor=`echo "$DRV_DATA"  | cut -d ':' -f 4`
+		model=`echo "$DRV_DATA"  | cut -d ':' -f 5`
+		serial_num=`echo "$DRV_DATA"  | cut -d ':' -f 6`
+		dev_name=`echo "$DRV_DATA"  | cut -d ':' -f 7`
+		username=`echo "$DRV_DATA"  | cut -d ':' -f 8`
+		password=`echo "$DRV_DATA"  | cut -d ':' -f 9`
+
+		#echo online = $online > /dev/console
+		#echo enable_sharing = $enable_sharing > /dev/console
+		#echo share_all_folder = $share_all_folder > /dev/console
+		#echo vendor = $vendor > /dev/console
+		#echo model = $model > /dev/console
+		#echo serial_num = $serial_num > /dev/console
+		#echo dev_name = $dev_name > /dev/console
+		#echo username = $username > /dev/console
+		#echo password = $password > /dev/console
+
+		if [ -n "$DRV_DATA" ]; then
+			if [ "${ONLINE1}" == "1" ] && [ "${vendor}" == "${VENDOR1}" ] && [ "${model}" == "${MODEL1}" ] && [ "${serial_num}" == "${SERIAL_NUM1}" ]; then
+				ccfg_cli set webdav_disk${DRIVE_ID}@drive="1:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${DEVNAME1}:${username}:${password}"
+			elif [ "${ONLINE2}" == "1" ] && [ "${vendor}" == "${VENDOR2}" ] && [ "${model}" == "${MODEL2}" ] && [ "${serial_num}" == "${SERIAL_NUM2}" ]; then
+				ccfg_cli set webdav_disk${DRIVE_ID}@drive="1:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${DEVNAME2}:${username}:${password}"
+			else
+				ccfg_cli set webdav_disk${DRIVE_ID}@drive="0:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${dev_name}:${username}:${password}"
+			fi
+		fi
+
+			let DRIVE_ID=$DRIVE_ID+1
+		done
+}
+
+webdav_default_folder_set()
+{
+	local DRIVE_ID
+	local VALID_ID
+	local CHECK
+	local DEV_NAME
+
+	echo "[webdav_folder_set] setting ftp default folder >>>"> /dev/console
+	echo $2 $3 $4 $5> /dev/console
+
+	DRIVE_ID=0
+	VALID_ID=-1
+	CHECK=0
+
+	if [ "$1" == "0" ]; then
+		webdav_disk_online_check
+
+		MAX_DRIVE=`ccfg_cli get max_drive@drive`
+
+		MAX_FOLDER=`ccfg_cli get max_folder@drive`
+
+		while [ "${DRIVE_ID}" -lt "${MAX_DRIVE}" ];
+		do
+			ONLINE=0
+
+			DRV_DATA=`ccfg_cli get webdav_disk${DRIVE_ID}@drive`
+
+			#echo DRV_DATA = $DRV_DATA > /dev/console
+
+			online=`echo "$DRV_DATA"  | cut -d ':' -f 1`
+			enable_sharing=`echo "$DRV_DATA"  | cut -d ':' -f 2`
+			share_all_folder=`echo "$DRV_DATA"  | cut -d ':' -f 3`
+			vendor=`echo "$DRV_DATA"  | cut -d ':' -f 4`
+			model=`echo "$DRV_DATA"  | cut -d ':' -f 5`
+			serial_num=`echo "$DRV_DATA"  | cut -d ':' -f 6`
+			dev_name=`echo "$DRV_DATA"  | cut -d ':' -f 7`
+			username=`echo "$DRV_DATA"  | cut -d ':' -f 8`
+			password=`echo "$DRV_DATA"  | cut -d ':' -f 9`
+
+			#echo online = $online > /dev/console
+			#echo enable_sharing = $enable_sharing > /dev/console
+			#echo share_all_folder = $share_all_folder > /dev/console
+			#echo vendor = $vendor > /dev/console
+			#echo model = $model > /dev/console
+			#echo serial_num = $serial_num > /dev/console
+			#echo dev_name = $dev_name > /dev/console
+			#echo username = $username > /dev/console
+			#echo password = $password > /dev/console
+
+			if [ -n "${DRV_DATA}" ]; then
+				if [ "${vendor}" == "${2}" ] && [ "${model}" == "${3}" ] && [ "${serial_num}" == "${4}" ]; then
+					ccfg_cli set webdav_disk${DRIVE_ID}@drive="1:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${5}:${username}:${password}"
+					CHECK=1
+				fi
+				else
+				if [ "${VALID_ID}" == "-1" ]; then
+				VALID_ID=$DRIVE_ID
+				fi
+			fi
+
+			if [ "${online}" == "0" ] && [ "${VALID_ID}" == "-1" ]; then
+				VALID_ID=$DRIVE_ID
+			fi
+
+			let DRIVE_ID=$DRIVE_ID+1
+		done
+
+		if [ "${CHECK}" == "0" ]; then
+				ccfg_cli set webdav_disk${VALID_ID}@drive="1:0:1:${2}:${3}:${4}:${5}:root${VALID_ID}:"
+
+				FOLDER_ID=0
+
+				while [ "${FOLDER_ID}" -lt "${MAX_FOLDER}" ];
+				do
+					ccfg_cli unset webdav${VALID_ID}_folder${FOLDER_ID}@drive
+					ccfg_cli unset webdav${VALID_ID}_folder${FOLDER_ID}_display_name@drive
+
+					let FOLDER_ID=$FOLDER_ID+1
+				done
+		fi
+	else
+		webdav_disk_online_check
+		webdav_folder_add
+	fi
+}
+
+webdav_folder_add()
+{
+	local DRIVE_ID=0
+	local FOLDER_ID=0
+	local ONLINE1=0
+	local VENDOR1
+	local MODEL1
+	local DEVNAME1
+	local ONLINE2=0
+	local VENDOR2
+	local MODEL2
+	local DEVNAME2
+	local DEV_NAME
+	local LAN_IP
+	local SET_STR
+	local FOLDER_DATA
+	local USR_PASSWORD
+	local RUN_SERVER
+	local ACCESS_FROM_WAN=0
+	local nolabel_count=0
+	local tmp_nolabel_count=0
+	local display_name
+	local directory_type=1  # type 1= /vol_label/display_name , type 2= complete directory structure.
+
+	rm -Rf /tmp/lighttpd.conf
+	cp /etc/lighttpd/lighttpd.conf /tmp/lighttpd.conf
+
+	#copy ssl certificate
+	if [ -e /etc/config/cert/WebServer/webserver.key.pem ]; then
+		cp /etc/config/cert/WebServer/webserver.key.pem /tmp/webdav/lighttpd.key
+	else
+		cp /etc/config/cert/WebServer/hr-webserver.key.pem /tmp/webdav/lighttpd.key
+	fi
+
+	if [ -e /etc/config/cert/WebServer/webserver.crt.pem ]; then
+		cp /etc/config/cert/WebServer/webserver.crt.pem /tmp/webdav/lighttpd.crt
+	else
+		cp /etc/config/cert/WebServer/hr-webserver.crt.pem /tmp/webdav/lighttpd.crt
+	fi
+
+	cat /tmp/webdav/lighttpd.key /tmp/webdav/lighttpd.crt > /tmp/webdav/lighttpd.pem
+
+	MAX_DRIVE=`ccfg_cli get max_drive@drive`
+#	MAX_FOLDER=`ccfg_cli get max_folder@drive`
+	MAX_FOLDER=8
+	CONTENT_SHARING=`ccfg_cli get content_sharing@drive`
+
+	if [ "${CONTENT_SHARING}" == "0" ]; then
+		exit
+	fi
+
+	ONLINE1=`ccfg_cli -f "$DRV_STAT_FILE" get online1@drive`
+	VENDOR1=`ccfg_cli -f "$DRV_STAT_FILE" get vendor1@drive`
+	MODEL1=`ccfg_cli -f "$DRV_STAT_FILE" get model1@drive`
+	SERIAL_NUM1=`ccfg_cli -f "$DRV_STAT_FILE" get serial_num1@drive`
+	DEVNAME1=`ccfg_cli -f "$DRV_STAT_FILE" get devname1@drive`
+
+	ONLINE2=`ccfg_cli -f "$DRV_STAT_FILE" get online2@drive`
+	VENDOR2=`ccfg_cli -f "$DRV_STAT_FILE" get vendor2@drive`
+	MODEL2=`ccfg_cli -f "$DRV_STAT_FILE" get model2@drive`
+	SERIAL_NUM2=`ccfg_cli -f "$DRV_STAT_FILE" get serial_num2@drive`
+	DEVNAME2=`ccfg_cli -f "$DRV_STAT_FILE" get devname2@drive`
+
+	ACCESS_FROM_WAN=`ccfg_cli get remote_enb1@webdav`
+	remote_port=`ccfg_cli get remote_port1@webdav`
+	echo remote_port = $remote_port > /dev/console
+
+
+	while [ "${DRIVE_ID}" -lt "${MAX_DRIVE}" ];
+	do
+		FOLDER_ID=0
+
+		DRV_DATA=`ccfg_cli get webdav_disk${DRIVE_ID}@drive`
+
+		echo DRV_DATA = $DRV_DATA > /dev/console
+
+		online=`echo "$DRV_DATA"  | cut -d ':' -f 1`
+		enable_sharing=`echo "$DRV_DATA"  | cut -d ':' -f 2`
+		share_all_folder=`echo "$DRV_DATA"  | cut -d ':' -f 3`
+		vendor=`echo "$DRV_DATA"  | cut -d ':' -f 4`
+		model=`echo "$DRV_DATA"  | cut -d ':' -f 5`
+		serial_num=`echo "$DRV_DATA"  | cut -d ':' -f 6`
+		dev_name=`echo "$DRV_DATA"  | cut -d ':' -f 7`
+		username=`echo "$DRV_DATA"  | cut -d ':' -f 8`
+		password=`echo "$DRV_DATA"  | cut -d ':' -f 9`
+
+		#echo online = $online > /dev/console
+		#echo enable_sharing = $enable_sharing > /dev/console
+		#echo share_all_folder = $share_all_folder > /dev/console
+		#echo vendor = $vendor > /dev/console
+		#echo model = $model > /dev/console
+		#echo serial_num = $serial_num > /dev/console
+		#echo dev_name = $dev_name > /dev/console
+		#echo username = $username > /dev/console
+		#echo password = $password > /dev/console
+
+		if [ "${ONLINE1}" == "1" ] && [ "${vendor}" == "${VENDOR1}" ] && [ "${model}" == "${MODEL1}" ] && [ "${serial_num}" == "${SERIAL_NUM1}" ]; then
+			DEV_NAME=$DEVNAME1
+		elif [ "${ONLINE2}" == "1" ] && [ "${vendor}" == "${VENDOR2}" ] && [ "${model}" == "${MODEL2}" ] && [ "${serial_num}" == "${SERIAL_NUM2}" ]; then
+			DEV_NAME=$DEVNAME2
+		fi
+
+		echo DEV_NAME = $DEV_NAME > /dev/console
+
+		if [ -n "${DRV_DATA}" ] && [ -n "${DEV_NAME}" ]; then
+			if [ "${online}" == "1" ] && [ "${enable_sharing}" == "1" ]; then
+				RUN_SERVER=1;
+				USR_PASSWORD=${password}
+
+				echo USR_PASSWORD $USR_PASSWORD > /dev/console
+
+				#echo "$username:${USR_PASSWORD}" >> $WEBDAV_PWD_FILE
+				if [ "${DEV_NAME}" == "sda" ]; then
+					realm=$REALM
+					hash=`echo -n "$username:$realm:${password}" | md5sum | cut -b -32`
+					echo "$username:$realm:$hash" >> $WEBDAV_PWD_FILE
+				else
+					realm=$REALM
+					hash=`echo -n "$username:$realm:${password}" | md5sum | cut -b -32`
+					echo "$username:$realm:$hash" >> $WEBDAV_PWD_FILE1
+				fi
+
+				#mkdir -m 0755 -p /tmp/nas
+
+				if [ "${share_all_folder}" == "1" ]; then
+
+					dev_mount_num=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_mount_num@volinfo`
+					#echo dev_mount_num = $dev_mount_num > /dev/console
+
+					dev_id=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_id@volinfo`
+					#echo dev_id = $dev_id > /dev/console
+
+					part_id=1
+
+					while [ "${part_id}" -le "${dev_mount_num}" ];
+					do
+						vol_type=`ccfg_cli -f "$VOL_INFO_FILE" get volType@disk${dev_id}_${part_id}`
+						if [ "${vol_type}" == "Unknown" ]; then
+							let part_id=$part_id+1
+							continue
+						fi
+
+						dev_name=`ccfg_cli -f "$VOL_INFO_FILE" get devName@disk${dev_id}_${part_id}`
+						#echo dev_name = $dev_name > /dev/console
+
+						mount_folder=${dev_name:2}
+						#echo mount_folder = $mount_folder > /dev/console
+
+						#ALLPATH="/tmp/usb/"${mount_folder}${path}
+						ALLPATH="/tmp/usb/"${mount_folder}
+						echo ALLPATH = $ALLPATH > /dev/console
+						vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${part_id}`
+
+						if [ "$vol_label" == "<no_label>" ]; then
+							if [ "$nolabel_count" == "0" ]; then
+								if [ "${DEV_NAME}" == "sda" ]; then
+									ln -sf ${ALLPATH} "/tmp/nas/DATA"
+								else
+									ln -sf ${ALLPATH} "/tmp/nas2/DATA"
+								fi
+								let nolabel_count=$nolabel_count+2
+							else
+								if [ "${DEV_NAME}" == "sda" ]; then
+									ln -sf ${ALLPATH} "/tmp/nas/DATA-${nolabel_count}"
+								else
+									ln -sf ${ALLPATH} "/tmp/nas2/DATA-${nolabel_count}"
+								fi
+								let nolabel_count=$nolabel_count+1
+							fi
+						else
+							if [ "${DEV_NAME}" == "sda" ]; then
+								ln -sf ${ALLPATH} "/tmp/nas/${vol_label}"
+							else
+								ln -sf ${ALLPATH} "/tmp/nas2/${vol_label}"
+							fi
+						fi
+
+						#ln -sf ${ALLPATH} /tmp/nas/partition${part_id}
+
+						file_name=`echo "$ALLPATH"  | grep -o "[^/]*$"`
+						#echo file_name = $file_name > /dev/console
+
+						total_file_name="${ALLPATH}"/"${file_name}"
+						#echo total_file_name = $total_file_name > /dev/console
+
+						if [ -h "$total_file_name" ]; then
+							rm -Rf "$total_file_name"
+						fi
+						let part_id=$part_id+1
+						#ln -s /tmp/usb /tmp/nas
+						#mount --bind /tmp/nas /tmp/usb
+
+					done
+
+				else
+					dev_id=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_id@volinfo`
+					if [ "$dev_id" == "1" ]; then
+						nolabel_count=$tmp_nolabel_count
+					fi
+					mount_num=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_mount_num@volinfo`
+					#echo mount_num = $mount_num > /dev/console
+					part_id=1
+					while [ "${part_id}" -le "${mount_num}" ];
+					do
+						vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${part_id}`
+						if [ "$vol_label" == "<no_label>" ]; then
+							if [ "$nolabel_count" == "0" ]; then
+								#ln -sf ${ALLPATH} "/tmp/nas/DATA"
+								vol_label_1="DATA"
+								let nolabel_count=$nolabel_count+2
+							else
+								#ln -sf ${ALLPATH} "/tmp/nas/DATA-${nolabel_count}"
+								if [ "$nolabel_count" == "2" ]; then
+									vol_label_2="DATA-${nolabel_count}"
+								fi
+								if [ "$nolabel_count" == "3" ]; then
+									vol_label_3="DATA-${nolabel_count}"
+								fi
+								if [ "$nolabel_count" == "4" ]; then
+									vol_label_4="DATA-${nolabel_count}"
+								fi
+								if [ "$nolabel_count" == "5" ]; then
+									vol_label_5="DATA-${nolabel_count}"
+								fi
+								if [ "$nolabel_count" == "6" ]; then
+									vol_label_6="DATA-${nolabel_count}"
+								fi
+								if [ "$nolabel_count" == "7" ]; then
+									vol_label_7="DATA-${nolabel_count}"
+								fi
+								if [ "$nolabel_count" == "8" ]; then
+									vol_label_8="DATA-${nolabel_count}"
+								fi
+
+								let nolabel_count=$nolabel_count+1
+							fi
+						fi
+						let part_id=$part_id+1
+					done
+
+					while [ "${FOLDER_ID}" -lt "${MAX_FOLDER}" ];
+					do
+						FOLDER_DATA=`ccfg_cli get webdav${DRIVE_ID}_folder${FOLDER_ID}@drive`
+
+						if [ -n "${FOLDER_DATA}" ]; then
+							partition_idx=`echo "$FOLDER_DATA"  | cut -d ':' -f 1`
+							path=`echo "$FOLDER_DATA"  | cut -d ':' -f 2`
+							share_folder=`echo "$path"  | grep -o "[^/]*$"`
+
+
+							#echo partition_idx= $partition_idx> /dev/console
+							echo path= $path> /dev/console
+							echo share_folder= $share_folder> /dev/console
+
+							dev_id=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_id@volinfo`
+							#echo dev_id = $dev_id > /dev/console
+
+							#dev_name=`ccfg_cli -f "$VOL_INFO_FILE" get devName@disk${dev_id}_${partition_idx}`
+							dev_name=${DEV_NAME}${partition_idx}	# sdaX or sdbX
+							echo dev_name = $dev_name > /dev/console
+
+							mount_folder=${dev_name:2}	# aX or bX
+							#echo mount_folder = $mount_folder > /dev/console
+
+							mount_num=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_mount_num@volinfo`
+							echo mount_num = $mount_num > /dev/console
+
+							if [ "$dev_id" == "0" ]; then
+								tmp_nolabel_count=$nolabel_count
+								echo tmp_nolabel_count = $tmp_nolabel_count > /dev/console
+							fi
+
+							part_id=1
+
+							if [ "$dev_id" == "0" ]; then
+								nolabel_count=0
+							else
+								nolabel_count=$tmp_nolabel_count
+							fi
+
+							while [ "${part_id}" -le "${mount_num}" ];
+							do
+								dev_name_cmp=`ccfg_cli -f "$VOL_INFO_FILE" get devName@disk${dev_id}_${part_id}`
+								vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${part_id}`
+								echo dev_name_cmp = $dev_name_cmp > /dev/console
+								if [ "$dev_name_cmp" == "$dev_name" ]; then
+									echo nolabel_count = $nolabel_count > /dev/console
+									if [ "$vol_label" == "<no_label>" ]; then
+										if [ "$nolabel_count" == "0" ]; then
+											vol_label="$vol_label_1"
+											#echo vol_label 0 = $vol_label_1 > /dev/console
+										fi
+										if [ "$nolabel_count" == "2" ]; then
+											vol_label="$vol_label_2"
+											#echo vol_label 2 = $vol_label_2 > /dev/console
+										fi
+										if [ "$nolabel_count" == "3" ]; then
+											vol_label="$vol_label_3"
+											#echo vol_label 3 = $vol_label_3 > /dev/console
+										fi
+										if [ "$nolabel_count" == "4" ]; then
+											vol_label="$vol_label_4"
+											#echo vol_label 4 = $vol_label_4 > /dev/console
+										fi
+										if [ "$nolabel_count" == "5" ]; then
+											vol_label="$vol_label_5"
+											#echo vol_label 5 = $vol_label_5 > /dev/console
+										fi
+										if [ "$nolabel_count" == "6" ]; then
+											vol_label="$vol_label_6"
+											#echo vol_label 6 = $vol_label_6 > /dev/console
+										fi
+										if [ "$nolabel_count" == "7" ]; then
+											vol_label="$vol_label_7"
+											#echo vol_label 7 = $vol_label_7 > /dev/console
+										fi
+										if [ "$nolabel_count" == "8" ]; then
+											vol_label="$vol_label_8"
+											#echo vol_label 8 = $vol_label_8 > /dev/console
+										fi
+									fi
+									let part_id=$mount_num
+								fi
+
+								if [ "$vol_label" == "<no_label>" ]; then
+									if [ "$nolabel_count" == "0" ]; then
+										let nolabel_count=$nolabel_count+2
+									else
+										let nolabel_count=$nolabel_count+1
+									fi
+								fi
+
+								let part_id=$part_id+1
+							done
+
+							#vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${partition_idx}`
+							#echo "vol_label = "$vol_label
+
+							echo vol_label = $vol_label > /dev/console
+
+							display_name=`ccfg_cli get webdav"$dev_id"_folder"$FOLDER_ID"_display_name@drive`
+
+							echo display_name = $display_name > /dev/console
+
+							#add the folder to lighttpd config file
+							ALLPATH="/tmp/usb/"${mount_folder}"${path}"
+							echo ALLPATH = $ALLPATH > /dev/console
+
+							if [ "$path" == "/" ]; then
+								if [ "${DEV_NAME}" == "sda" ]; then
+									ln -s "$ALLPATH" "/tmp/nas/${vol_label}"
+								else
+									ln -s "$ALLPATH" "/tmp/nas2/${vol_label}"
+								fi
+							else
+								if [ "${DEV_NAME}" == "sda" ]; then
+									cd "/tmp/nas"
+								else
+									cd "/tmp/nas2"
+								fi
+								mkdir $vol_label
+								cd $vol_label
+								if [ "$directory_type" == "1" ]; then
+									ln -s "$ALLPATH" $display_name
+								elif [ "$directory_type" == "2" ]; then
+									token_idx=2  # first token always is empty (ex: /xxx/yyy)
+									path_token=`echo "$path"  | cut -d '/' -f $token_idx`
+									while [ "$path_token" != "" ]
+									do
+										let token_idx=$token_idx+1
+										path_token_next=`echo "$path"  | cut -d '/' -f $token_idx`
+										if [ "$path_token_next" == "" ]; then
+											ln -s "$ALLPATH" "$path_token"
+										else
+											mkdir $path_token
+											cd $path_token
+										fi
+										path_token=$path_token_next
+									done
+								fi
+							fi
+
+							SHAREPATH="/tmp/nas/"${share_folder}
+							echo SHAREPATH = $SHAREPATH > /dev/console
+
+							#mkdir -m 0755 -p /tmp/nas/${share_folder}
+							#ln -s $ALLPATH /tmp/nas/${share_folder}
+							#ln -s "${ALLPATH}" "/tmp/nas" #$SHAREPATH
+							#mount --bind /tmp/nas/${share_folder} $ALLPATH
+
+							if [ "$path" == "/" ]; then
+								total_file_name="${ALLPATH}""${mount_folder}"
+							else
+								total_file_name="${ALLPATH}"/"${share_folder}"
+							fi
+
+							#echo total_file_name = $total_file_name > /dev/console
+							if [ -h "$total_file_name" ]; then
+								rm -Rf "$total_file_name"
+							fi
+						fi
+						let FOLDER_ID=$FOLDER_ID+1
+					done
+				fi
+			fi
+		fi
+		let DRIVE_ID=$DRIVE_ID+1
+	done
+
+	if [ "${RUN_SERVER}" == "1" ]; then
+		mkdir -m 0755 -p /tmp/log/lighttpd
+		echo 'server.port = 8080' >> /tmp/lighttpd.conf
+		if [ "${ACCESS_FROM_WAN}" == "1" ]; then
+			echo "\$SERVER[\"socket\"] == \":${remote_port}\" { " >> /tmp/lighttpd.conf
+			echo 'ssl.engine = "enable"'  >> /tmp/lighttpd.conf
+			echo 'ssl.pemfile = "/tmp/webdav/lighttpd.pem"'  >> /tmp/lighttpd.conf
+			echo 'server.document-root = "/tmp/nas"'  >> /tmp/lighttpd.conf
+			echo '}'  >> /tmp/lighttpd.conf
+		fi
+		/usr/sbin/lighttpd -f /tmp/lighttpd.conf
+	fi
+}
+
+case "$1" in
+	"webdav_folder_add")		webdav_folder_add;;
+	"webdav_default_folder_set")		webdav_default_folder_set "$2" "$3" "$4" "$5" "$6";;
+	*)
+				echo $0 "webdav_folder_add  - WebDAV folder set function"
+				;;
+esac

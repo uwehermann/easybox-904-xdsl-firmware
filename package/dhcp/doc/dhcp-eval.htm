@@ -1,0 +1,464 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>dhcp-eval(5): ISC DHCP conditional evaluation - Linux man page</title>
+<!-- base href="http://linux.die.net/man/5/dhcp-eval" -->
+<link rel="canonical" href="http://linux.die.net/man/5/dhcp-eval">
+<link rel="stylesheet" type="text/css" href="dhcp-eval_files/white.css">
+<link rel="shortcut icon" href="http://linux.die.net/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=800,maximum-scale=1.0">
+<meta name="description" content="The Internet Systems Consortium DHCP client and server both provide the ability to perform conditional behavior depending on the contents of packets they receive.">
+<script src="dhcp-eval_files/ga.js" async="" type="text/javascript"></script><script type="text/javascript">
+<!--
+var _gaq = _gaq || [];_gaq.push(['_setAccount', 'UA-50820-6']);_gaq.push(['_trackPageview']);
+window.google_analytics_uacct = 'UA-50820-6';
+// -->
+</script>
+</head>
+
+<body alink="#000000" bgcolor="#ffffff" link="#660000" text="#333333" vlink="#660000">
+<div id="bg"><div id="content">
+
+<!-- google_ad_section_start -->
+<h1>dhcp-eval(5) - Linux man page</h1>
+
+<h2>Name</h2>
+dhcp-eval - ISC DHCP conditional evaluation
+<h2>Description</h2>
+The Internet Systems Consortium DHCP client and server both provide the 
+ability to perform
+conditional behavior depending on the contents of packets they receive. 
+The syntax for specifying this conditional behaviour is documented here.
+<h2>Reference: Conditional Behaviour</h2>
+Conditional behaviour is specified using the if statement and the else 
+or
+elsif statements. A conditional statement can appear anywhere that a 
+regular statement (e.g., an option statement) can appear, and can 
+enclose one or more such
+statements. A typical conditional statement in a server might be:
+<pre class="code">if option dhcp-user-class = "accounting" {
+  max-lease-time 17600;
+  option domain-name "accounting.example.org";
+  option domain-name-servers ns1.accounting.example.org,
+<tt>           </tt>      ns2.accounting.example.org;
+} elsif option dhcp-user-class = "sales" {
+  max-lease-time 17600;
+  option domain-name "sales.example.org";
+  option domain-name-servers ns1.sales.example.org,
+<tt>           </tt>      ns2.sales.example.org;
+} elsif option dhcp-user-class = "engineering" {
+  max-lease-time 17600;
+  option domain-name "engineering.example.org";
+  option domain-name-servers ns1.engineering.example.org,
+<tt>           </tt>      ns2.engineering.example.org;
+} else {
+  max-lease-time 600;
+  option domain-name "misc.example.org";
+  option domain-name-servers ns1.misc.example.org,
+<tt>           </tt>      ns2.misc.example.org;
+}</pre>On the client side, an example of conditional evaluation might be:
+<pre class="code"># example.org filters DNS at its firewall, so we have to use their DNS
+# servers when we connect to their network.   If we are not at
+# example.org, prefer our own DNS server.
+if not option domain-name = "example.org" {
+  prepend domain-name-servers 127.0.0.1;
+}</pre>The <b>if</b> statement and the <b>elsif</b> continuation 
+statement both take boolean expressions as their arguments. That is, 
+they take expressions that,
+when evaluated, produce a boolean result. If the expression evaluates to
+ true, then the statements enclosed in braces following the <b>if</b> statement are
+executed, and all subsequent <b>elsif</b> and <b>else</b> clauses are skipped. Otherwise, each subsequent <b>elsif</b>
+ clause's expression is checked, until an
+elsif clause is encountered whose test evaluates to true. If such a 
+clause is found, the statements in braces following it are executed, and
+ then any
+subsequent <b>elsif</b> and <b>else</b> clauses are skipped. If all the <b>if</b> and <b>elsif</b> clauses are checked but none of their expressions evaluate
+true, then if there is an <b>else</b> clause, the statements enclosed in braces following the <b>else</b> are evaluated. Boolean expressions that evaluate to
+null are treated as false in conditionals.
+<h2>Boolean Expressions</h2>
+<div id="adright">
+<script type="text/javascript"><!--
+google_ad_client = "pub-5823754184406795";
+google_ad_slot = "5992934909";
+google_ad_width = 300;
+google_ad_height = 250;
+//-->
+</script>
+<script type="text/javascript" src="dhcp-eval_files/show_ads.js">
+</script><ins style="display:inline-table;border:none;height:250px;margin:0;padding:0;position:relative;visibility:visible;width:300px"><ins id="aswift_0_anchor" style="display:block;border:none;height:250px;margin:0;padding:0;position:relative;visibility:visible;width:300px"><iframe allowtransparency="true" hspace="0" marginwidth="0" marginheight="0" onload="var i=this.id,s=window.google_iframe_oncopy,H=s&amp;&amp;s.handlers,h=H&amp;&amp;H[i],w=this.contentWindow,d;try{d=w.document}catch(e){}if(h&amp;&amp;d&amp;&amp;(!d.body||!d.body.firstChild)){if(h.call){i+='.call';setTimeout(h,0)}else if(h.match){i+='.nav';w.location.replace(h)}s.log&amp;&amp;s.log.push(i)}" vspace="0" id="aswift_0" name="aswift_0" style="left:0;position:absolute;top:0;" frameborder="0" height="250" scrolling="no" width="300"></iframe></ins></ins>
+</div>
+
+The following is the current list of boolean expressions that are supported by the DHCP
+distribution.
+<p><i>data-expression-1</i> <b>=</b> <i>data-expression-2</i>
+</p><blockquote>
+<p>The <b>=</b> operator compares the values of two data expressions, 
+returning true if they are the same, false if they are not. If either 
+the left-hand side
+or the right-hand side are null, the result is also null.</p></blockquote>
+<p><i>data-expression-1</i> <b>~=</b> <i>data-expression-2 data-expression-1</i> <b>~~</b> <i>data-expression-2</i>
+</p><blockquote>
+<p>The <b>~=</b> and <b>~~</b> operators (not available on all systems) perform extended <i><b><a href="http://linux.die.net/man/7/regex">regex</a></b>(7)</i> matching of the values of two data expressions,
+returning true if <i>data-expression-1</i> matches against the regular expression evaluated by <i>data-expression-2</i>, or false if it does not match or
+encounters some error. If either the left-hand side or the right-hand side are null, the result is also false. The <b>~~</b> operator differs from the
+<b>~=</b> operator in that it is case-insensitive.</p></blockquote>
+<p><i>boolean-expression-1</i> <b>and</b> <i>boolean-expression-2</i>
+</p><blockquote>The <b>and</b> operator evaluates to true if the boolean
+ expression on the left-hand side and the boolean expression on the 
+right-hand side both
+evaluate to true. Otherwise, it evaluates to false. If either the 
+expression on the left-hand side or the expression on the right-hand 
+side are null, the
+result is null.</blockquote>
+<p><i>boolean-expression-1</i> <b>or</b> <i>boolean-expression-2</i>
+</p><blockquote>The <b>or</b> operator evaluates to true if either the 
+boolean expression on the left-hand side or the boolean expression on 
+the right-hand side
+evaluate to true. Otherwise, it evaluates to false. If either the 
+expression on the left-hand side or the expression on the right-hand 
+side are null, the
+result is null.</blockquote>
+<p><b>not <i>boolean-expression</i></b>
+</p><blockquote>The <b>not</b> operator evaluates to true if <i>boolean-expression</i> evaluates to false, and returns false if <i>boolean-expression</i> evaluates
+to true. If <i>boolean-expression</i> evaluates to null, the result is also null.</blockquote>
+<p><b>exists <i>option-name</i></b>
+</p><blockquote>The <b>exists</b> expression returns true if the specified option exists in the incoming DHCP packet being processed.</blockquote><b>known</b>
+<blockquote>The <b>known</b> expression returns true if the client whose
+ request is currently being processed is known - that is, if there's a 
+host declaration
+for it.</blockquote><b>static</b>
+<blockquote>The <b>static</b> expression returns true if the lease assigned to the client whose request is currently being processed is derived from a static
+address assignment.</blockquote>
+<h2>Data Expressions</h2>
+Several of the boolean expressions above depend on the results of evaluating data
+expressions. A list of these expressions is provided here.
+<p><b>substring (<i>data-expr<b>, <i>offset<b>, <i>length<b>)</b></i></b></i></b></i></b>
+</p><blockquote>The <b>substring</b> operator evaluates the data expression and returns the substring of the result of that evaluation that starts <i>offset</i>
+bytes from the beginning, continuing for <i>length</i> bytes. <i>Offset</i> and <i>length</i> are both numeric expressions. If <i>data-expr</i>, <i>offset</i>
+or <i>length</i> evaluate to null, then the result is also null. If <i>offset</i> is greater than or equal to the length of the evaluated data, then a
+zero-length data string is returned. If <i>length</i> is greater then the remaining length of the evaluated data after <i>offset</i>, then a data string
+containing all data from <i>offset</i> to the end of the evaluated data is returned.</blockquote>
+<p><b>suffix (<i>data-expr<b>, <i>length<b>)</b></i></b></i></b>
+</p><blockquote>The <b>suffix</b> operator evaluates <i>data-expr</i> and returns the last <i>length</i> bytes of the result of that evaluation. <i>Length</i> is a
+numeric expression. If <i>data-expr</i> or <i>length</i> evaluate to null, then the result is also null. If <i>suffix</i> evaluates to a number greater than
+the length of the evaluated data, then the evaluated data is returned.</blockquote>
+<p><b>lcase (<i>data-expr<b>)</b></i></b>
+</p><blockquote>The <b>lcase</b> function returns the result of evaluating <i>data-expr</i> converted to lower case. If <i>data-expr</i> evaluates to null, then
+the result is also null.</blockquote>
+<p><b>ucase (<i>data-expr<b>)</b></i></b>
+</p><blockquote>The <b>ucase</b> function returns the result of evaluating <i>data-expr</i> converted to upper case. If <i>data-expr</i> evaluates to null, then
+the result is also null.</blockquote>
+<p><b>option <i>option-name</i></b>
+</p><blockquote>The <b>option</b> operator returns the contents of the specified option in the packet to which the server is responding.</blockquote>
+<p><b>config-option <i>option-name</i></b>
+</p><blockquote>The <b>config-option</b> operator returns the value for the specified option that the DHCP client or server has been configured to
+send.</blockquote>
+<p><b>hardware</b>
+</p><blockquote>The <b>hardware</b> operator returns a data string whose first element is the type of network interface indicated in packet being considered, and
+whose subsequent elements are client's link-layer address. If there is no packet, or if the RFC2131 <i>hlen</i> field is invalid, then the result is null.
+Hardware types include <i>ethernet (1)</i>, <i>token-ring (6)</i>, and <i>fddi (8)</i>. Hardware types are specified by the IETF, and details on how the type
+numbers are defined can be found in RFC2131 (in the ISC DHCP distribution, this is included in the doc/ subdirectory).</blockquote>
+<p><b>packet (<i>offset<b>, <i>length<b>)</b></i></b></i></b>
+</p><blockquote>The <b>packet</b> operator returns the specified portion of the packet being considered, or null in contexts where no packet is being considered.
+<i>Offset</i> and <i>length</i> are applied to the contents packet as in the <b>substring</b> operator.</blockquote>
+<p><i>string</i>
+</p><blockquote>A string, enclosed in quotes, may be specified as a data
+ expression, and returns the text between the quotes, encoded in ASCII. 
+The backslash ('\')
+character is treated specially, as in C programming: '\t' means TAB, 
+'\r' means carriage return, '\n' means newline, and '\b' means bell. Any
+ octal value can
+be specified with '\nnn', where nnn is any positive octal number less 
+than 0400. Any hexadecimal value can be specified with '\xnn', where nn 
+is any positive
+hexadecimal number less than or equal to 0xff.</blockquote>
+<p><i>colon-separated</i> hexadecimal list
+</p><blockquote>A list of hexadecimal octet values, separated by colons, may be specified as a data expression.</blockquote>
+<p><b>concat (<i>data-expr1<b>, ..., <i>data-exprN<b>)</b></i></b></i></b>
+</p><blockquote>The expressions are evaluated, and the results of each 
+evaluation are concatenated in the sequence that the subexpressions are 
+listed. If any
+subexpression evaluates to null, the result of the concatenation is 
+null.</blockquote>
+<p><b>reverse (<i>numeric-expr1<b>, <i>data-expr2<b>)</b></i></b></i></b>
+</p><blockquote>The two expressions are evaluated, and then the result 
+of evaluating the data expression is reversed in place, using hunks of 
+the size specified in
+the numeric expression. For example, if the numeric expression evaluates
+ to four, and the data expression evaluates to twelve bytes of data, 
+then the reverse
+expression will evaluate to twelve bytes of data, consisting of the last
+ four bytes of the the input data, followed by the middle four bytes, 
+followed by the
+first four bytes.</blockquote>
+<p><b>leased-address</b>
+</p><blockquote>In any context where the client whose request is being 
+processed has been assigned an IP address, this data expression returns 
+that IP address. In
+any context where the client whose request is being processed has not 
+been assigned an ip address, if this data expression is found in 
+executable statements
+executed on that client's behalf, a log message indicating "there is no 
+lease associated with this client" is syslogged to the debug level (this
+ is considered
+dhcpd.conf debugging information).</blockquote>
+<p><b>binary-to-ascii (<i>numeric-expr1<b>, <i>numeric-expr2<b>, <i>data-expr1<b>,</b></i></b></i></b> data-expr2<b>)</b></i></b>
+</p><blockquote>Converts the result of evaluating data-expr2 into a text
+ string containing one number for each element of the result of 
+evaluating data-expr2. Each
+number is separated from the other by the result of evaluating 
+data-expr1. The result of evaluating numeric-expr1 specifies the base (2
+ through 16) into which
+the numbers should be converted. The result of evaluating numeric-expr2 
+specifies the width in bits of each number, which may be either 8, 16 or
+ 32.
+<p>As an example of the preceding three types of expressions, to produce
+ the name of a PTR record for the IP address being assigned to a client,
+ one could
+write the following expression:</p></blockquote>
+<pre class="code">concat (binary-to-ascii (10, 8, ".",
+                         reverse (1, leased-address)),
+        ".in-addr.arpa.");</pre><b>encode-int (<i>numeric-expr<b>, <i>width<b>)</b></i></b></i></b>
+<blockquote>Numeric-expr is evaluated and encoded as a data string of 
+the specified width, in network byte order (most significant byte 
+first). If the numeric
+expression evaluates to the null value, the result is also null.</blockquote>
+<p><b>pick-first-value (<i>data-expr1</i> [ ... <i>expr</i>n ] )</b>
+</p><blockquote>The pick-first-value function takes any number of data 
+expressions as its arguments. Each expression is evaluated, starting 
+with the first in the
+list, until an expression is found that does not evaluate to a null 
+value. That expression is returned, and none of the subsequent 
+expressions are evaluated.
+If all expressions evaluate to a null value, the null value is returned.</blockquote>
+<p><b>host-decl-name</b>
+</p><blockquote>The host-decl-name function returns the name of the host
+ declaration that matched the client whose request is currently being 
+processed, if any. If
+no host declaration matched, the result is the null value.</blockquote>
+<h2>Numeric Expressions</h2>
+Numeric expressions are expressions that evaluate to an integer. In 
+general, the
+maximum size of such an integer should not be assumed to be 
+representable in fewer than 32 bits, but the precision of such integers 
+may be more than 32 bits.
+<p><b>extract-int (<i>data-expr<b>, <i>width<b>)</b></i></b></i></b>
+</p><blockquote>The <b>extract-int</b> operator extracts an integer 
+value in network byte order from the result of evaluating the specified 
+data expression. Width
+is the width in bits of the integer to extract. Currently, the only 
+supported widths are 8, 16 and 32. If the evaluation of the data 
+expression doesn't provide
+sufficient bits to extract an integer of the specified size, the null 
+value is returned.</blockquote>
+<p><b>lease-time</b>
+</p><blockquote>The duration of the current lease - that is, the difference between the current time and the time that the lease expires.</blockquote>
+<p><i>number</i>
+</p><blockquote>Any number between zero and the maximum representable size may be specified as a numeric expression.</blockquote>
+<p><b>client-state</b>
+</p><blockquote>The current state of the client instance being 
+processed. This is only useful in DHCP client configuration files. 
+Possible values are:
+<ul>
+<li>Booting - DHCP client is in the INIT state, and does not yet have an
+ IP address. The next message transmitted will be a DHCPDISCOVER, which 
+will be
+broadcast.
+</li><li>Reboot - DHCP client is in the INIT-REBOOT state. It has an IP 
+address, but is not yet using it. The next message to be transmitted 
+will be a DHCPREQUEST,
+which will be broadcast. If no response is heard, the client will bind 
+to its address and move to the BOUND state.
+</li><li>Select - DHCP client is in the SELECTING state - it has 
+received at least one DHCPOFFER message, but is waiting to see if it may
+ receive other DHCPOFFER
+messages from other servers. No messages are sent in the SELECTING 
+state.
+</li><li>Request - DHCP client is in the REQUESTING state - it has 
+received at least one DHCPOFFER message, and has chosen which one it 
+will request. The next
+message to be sent will be a DHCPREQUEST message, which will be 
+broadcast.
+</li><li>Bound - DHCP client is in the BOUND state - it has an IP address. No messages are transmitted in this state.
+</li><li>Renew - DHCP client is in the RENEWING state - it has an IP 
+address, and is trying to contact the server to renew it. The next 
+message to be sent will be a
+DHCPREQUEST message, which will be unicast directly to the server.
+</li><li>Rebind - DHCP client is in the REBINDING state - it has an IP 
+address, and is trying to contact any server to renew it. The next 
+message to be sent will be
+a DHCPREQUEST, which will be broadcast.</li></ul></blockquote>
+<h2>Reference: Action Expressions</h2>
+<p><b>log (<i>priority<b>, <i>data-expr<b>)</b></i></b></i></b>
+</p><blockquote>
+<p>Logging statements may be used to send information to the standard 
+logging channels. A logging statement includes an optional priority (<b>fatal</b>,
+<b>error</b>, <b>info</b>, or <b>debug</b>), and a data expression.
+</p><p>Logging statements take only a single data expression argument, 
+so if you want to output multiple data values, you will need to use the <b>concat</b>
+operator to concatenate them.</p></blockquote>
+<p><b>execute (<i>command-path <b>[, <i>data-expr1<b>, ... <i>data-exprN<b>]);</b></i></b></i></b></i></b>
+</p><blockquote>
+<p>The <b>execute</b> statement runs an external command. The first 
+argument is a string literal containing the name or path of the command 
+to run. The other
+arguments, if present, are either string literals or data- expressions 
+which evaluate to text strings, to be passed as command-line arguments 
+to the command.
+</p><p><b>execute</b> is synchronous; the program will block until the 
+external command being run has finished. Please note that lengthy 
+program execution (for
+example, in an "on commit" in dhcpd.conf) may result in bad performance 
+and timeouts. Only external applications with very short execution times
+ are suitable
+for use.
+</p><p>Passing user-supplied data to an external application might be 
+dangerous. Make sure the external application checks input buffers for 
+validity.
+Non-printable ASCII characters will be converted into dhcpd.conf 
+language octal escapes ("777"), make sure your external command handles 
+them as such.
+</p><p>It is possible to use the execute statement in any context, not 
+only on events. If you put it in a regular scope in the configuration 
+file you will execute
+that command every time a scope is evaluated.</p></blockquote>
+<h2>Reference: Dynamic Dns Updates</h2>
+<p>The DHCP client and server have the ability to dynamically update the
+ Domain Name System. Within the configuration files, you can define how 
+you want the
+Domain Name System to be updated. These updates are RFC 2136 compliant 
+so any DNS server supporting RFC 2136 should be able to accept updates 
+from the DHCP
+server.
+</p><h2>Security</h2>
+Support for TSIG and DNSSEC is not yet available. When you set your DNS 
+server up to allow updates
+from the DHCP server or client, you may be exposing it to unauthorized 
+updates. To avoid this, the best you can do right now is to use IP 
+address-based packet
+filtering to prevent unauthorized hosts from submitting update requests.
+ Obviously, there is currently no way to provide security for client 
+updates - this
+will require TSIG or DNSSEC, neither of which is yet available in the 
+DHCP distribution.
+<p>Dynamic DNS (DDNS) updates are performed by using the <b>dns-update</b> expression. The <b>dns-update</b>
+ expression is a boolean expression that takes four
+parameters. If the update succeeds, the result is true. If it fails, the
+ result is false. The four parameters that the are the resource record 
+type (RR), the
+left hand side of the RR, the right hand side of the RR and the ttl that
+ should be applied to the record. The simplest example of the use of the
+ function can
+be found in the reference section of the dhcpd.conf file, where events 
+are described. In this example several statements are being used to make
+ the arguments
+to the <b>dns-update</b>.
+</p><p>In the example, the first argument to the first Bdns-update 
+expression is a data expression that evaluates to the A RR type. The 
+second argument is
+constructed by concatenating the DHCP host-name option with a text 
+string containing the local domain, in this case "ssd.example.net". The 
+third argument is
+constructed by converting the address the client has been assigned from a
+ 32-bit number into an ascii string with each byte separated by a ".". 
+The fourth
+argument, the TTL, specifies the amount of time remaining in the lease 
+(note that this isn't really correct, since the DNS server will pass 
+this TTL out
+whenever a request comes in, even if that is only a few seconds before 
+the lease expires).
+</p><p>If the first <b>dns-update</b> statement succeeds, it is followed
+ up with a second update to install a PTR RR. The installation of a PTR 
+record is similar
+to installing an A RR except that the left hand side of the record is 
+the leased address, reversed, with ".in-addr.arpa" concatenated. The 
+right hand side is
+the fully qualified domain name of the client to which the address is 
+being leased.
+</p><h2>See Also</h2>
+<i><b><a href="http://linux.die.net/man/5/dhcpd.conf">dhcpd.conf</a></b>(5)</i>, <i><b><a href="http://linux.die.net/man/5/dhcpd.leases">dhcpd.leases</a></b>(5)</i>, <i><b><a href="http://linux.die.net/man/5/dhclient.conf">dhclient.conf</a></b>(5)</i>, <i><b><a href="http://linux.die.net/man/5/dhcp-options">dhcp-options</a></b>(5)</i>,
+<i><b><a href="http://linux.die.net/man/8/dhcpd">dhcpd</a></b>(8)</i>, <i><b><a href="http://linux.die.net/man/8/dhclient">dhclient</a></b>(8)</i>, RFC2132, RFC2131.
+<h2>Author</h2>
+The Internet Systems Consortium DHCP Distribution was written by Ted 
+Lemon under a contract with
+Vixie Labs. Funding for this project was provided through Internet 
+Systems Consortium. Information about Internet Systems Consortium can be
+ found at
+<i><b><a href="https://www.isc.org/">https://www.isc.org</a>.</b></i>
+
+<!-- google_ad_section_end -->
+<h2>Referenced By</h2>
+<b><a href="http://linux.die.net/man/5/dhcpd-options" rel="nofollow">dhcpd-options</a></b>(5)
+<div id="adbottom">
+<script type="text/javascript"><!--
+google_ad_client = "pub-5823754184406795";
+google_ad_slot = "8789940313";
+google_ad_width = 336;
+google_ad_height = 280;
+//-->
+</script>
+<script type="text/javascript" src="dhcp-eval_files/show_ads.js">
+</script><ins style="display:inline-table;border:none;height:280px;margin:0;padding:0;position:relative;visibility:visible;width:336px"><ins id="aswift_1_anchor" style="display:block;border:none;height:280px;margin:0;padding:0;position:relative;visibility:visible;width:336px"><iframe allowtransparency="true" hspace="0" marginwidth="0" marginheight="0" onload="var i=this.id,s=window.google_iframe_oncopy,H=s&amp;&amp;s.handlers,h=H&amp;&amp;H[i],w=this.contentWindow,d;try{d=w.document}catch(e){}if(h&amp;&amp;d&amp;&amp;(!d.body||!d.body.firstChild)){if(h.call){i+='.call';setTimeout(h,0)}else if(h.match){i+='.nav';w.location.replace(h)}s.log&amp;&amp;s.log.push(i)}" vspace="0" id="aswift_1" name="aswift_1" style="left:0;position:absolute;top:0;" frameborder="0" height="280" scrolling="no" width="336"></iframe></ins></ins>
+</div>
+
+</div>
+<div id="menu">
+<a href="http://www.die.net/"><img src="dhcp-eval_files/logo.png" alt="die.net" border="0" height="121" width="119"></a>
+
+
+<dl><dd>
+<form id="cse-search-box-menu" action="http://www.die.net/search/">
+<label><a href="http://www.die.net/search/">site search</a></label>
+<input name="q" size="10" type="text">
+<span style="font-family:Arial, Helvetica, sans-serif; font-size:75%">Google Custom Search</span>
+<input name="sa" value="Search" type="hidden">
+<input name="ie" value="ISO-8859-1" type="hidden">
+<input name="cx" value="partner-pub-5823754184406795:54htp1rtx5u" type="hidden">
+<input name="cof" value="FORID:9" type="hidden">
+</form>
+<script type="text/javascript">
+<!--
+document.forms["cse-search-box-menu"].action = "http://www.die.net/search/";
+// -->
+</script>
+</dd></dl>
+
+
+
+
+<dl>
+<dt>Library</dt>
+<dd><a href="http://linux.die.net/">linux docs</a></dd>
+<dd><a href="http://linux.die.net/man/">linux man pages</a></dd>
+<dd><a href="http://dictionary.die.net/">online dictionary</a></dd>
+<dd><a href="http://www.die.net/musings/page_load_time/">page load time</a></dd>
+</dl>
+<dl>
+<dt>Toys</dt>
+<dd><a href="http://www.die.net/earth/">world sunlight</a></dd>
+<dd><a href="http://www.die.net/moon/">moon phase</a></dd>
+<dd><a href="http://trace.die.net/">trace explorer</a></dd>
+</dl>
+
+
+<dl>
+<dt><a href="http://linux.die.net/man/5/"><img src="dhcp-eval_files/back.gif" alt="Back" border="0" height="22" width="20"></a></dt>
+</dl>
+
+</div></div>
+<script type="text/javascript">
+<!--
+if (top.location != self.location) top.location = self.location;
+if (/[?&][pq]=/.test(document.referrer)) document.write(unescape("%3Cscript src='/style/highlight.js' type='text/javascript'%3E%3C/script%3E"));
+function googleTranslateElementInit() {new google.translate.TranslateElement({pageLanguage: 'en', floatPosition: google.translate.TranslateElement.FloatPosition.TOP_RIGHT, gaTrack: true, gaId: 'UA-50820-6'});}
+if (!/^en/i.test(window.navigator.userLanguage||window.navigator.language)) document.write(unescape("%3Cscript src='//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit' type='text/javascript'%3E%3C/script%3E"));
+(function() {
+var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
+// -->
+</script>
+
+
+</body></html>

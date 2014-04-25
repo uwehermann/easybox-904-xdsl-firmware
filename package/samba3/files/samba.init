@@ -1,0 +1,37 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2008 OpenWrt.org
+
+. /etc/functions.sh
+
+#START=60
+SAMBA_CFG_PROG=/usr/sbin/sambacfg.sh
+
+boot() {
+	$SAMBA_CFG_PROG smb_user_cfg_set
+
+	#cp /etc/samba/smbpasswd.tmp /tmp/smbpasswd
+	ln -sf /tmp/etc/config/smbpasswd /tmp/smbpasswd
+
+	start	
+}
+
+reload() {
+	cp /etc/samba/smb.conf.debug /tmp/smb.conf
+	start
+}
+
+start() {
+	stop
+
+	if [ `/bin/grep -ci mptest /proc/cmdline` -ge 1 ] ; then
+		cp /etc/samba/smb.conf.debug /tmp/smb.conf
+	fi
+
+	smbd -D
+	nmbd -D -s /tmp/smb.conf
+}
+
+stop() {
+	pkill -KILL nmbd
+	pkill -KILL smbd
+}

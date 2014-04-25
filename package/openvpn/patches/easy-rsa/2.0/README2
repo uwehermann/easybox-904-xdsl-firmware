@@ -1,0 +1,15 @@
+OpenVPN Client Configuration
+===========================
+
+This file gives some hints on how to configure an OpenVPN client to connect to the EasyBox OpenVPN server.
+
+The archive file you downloaded from EasyBox contains the following files:
+
+README  -- This file
+<name>.ovpn  -- OpenVPN client configuration file
+<name>.p12  -- Certificates file in PKCS#12 format
+
+Please carefully check the content of the OpenVPN client configuration file and make sure
+everything is set up correctly before starting the OpenVPN connection.
+
+Please note: This configuration and manual is given WITHOUT WARRANTY.

@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# The init file runs the sadc command in order to write
+# the "LINUX RESTART" mark to the daily data file
+
+START=99
+
+start() {
+	mkdir -p /var/log/sysstat
+        /usr/lib/sysstat/sadc -d -F -L -
+}
+
+
+case "$1" in
+	"boot")		start & ;;
+	"start")	start & ;;
+#	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start Sysstat function'
+				echo $0 'start - start Sysstat function'
+#				echo $0 'stop  - stop Sysstat function'
+				;;
+esac

@@ -1,0 +1,6 @@
+config IFX_VOIP_PRACK
+	bool "PRACK support"
+	default n
+	help
+	 Option to enable PRACK support in SIP.
+

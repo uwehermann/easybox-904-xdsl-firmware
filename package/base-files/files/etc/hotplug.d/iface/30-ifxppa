@@ -1,0 +1,26 @@
+#!/bin/sh
+
+#. /etc/functions.sh
+#include /lib/network
+#scan_interfaces
+#config_get ifname $INTERFACE ifname
+ifname=`ccfg_cli get ifname@$INTERFACE`
+
+#echo "ifname=$ifname, INTERFACE=$INTERFACE" >> /tmp/ifxppa_rst
+
+[ ifup = "$ACTION" -a "$ifname" != "" ] && {
+    case "$INTERFACE" in
+        "wan"[0-9][0-9][0-9])            
+            ppacmd addwan -i $ifname
+            echo update $ifname > /proc/ppa/api/netif
+            ;;
+    esac
+}
+
+[ ifdown = "$ACTION" -a "$ifname" != "" ] && {
+    case "$INTERFACE" in
+        "wan"[0-9][0-9][0-9])
+            ppacmd delwan -i $ifname
+            ;;
+    esac
+}

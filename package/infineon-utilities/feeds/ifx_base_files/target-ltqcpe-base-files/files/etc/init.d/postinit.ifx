@@ -1,0 +1,15 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+if [ `/bin/grep -c -i voip /proc/cmdline` -ge 1 ] && ! [ -f /tmp/dect_demo_test ] ; then
+	echo "VoIP test mode" > /dev/console
+else
+#	/etc/init.d/bringup_ifx_net.sh
+	if [ -f /usr/sbin/dect_demo.sh ] ; then
+		/usr/sbin/dect_demo.sh start &
+	fi
+fi
+
+#(/usr/sbin/setup_netdev.sh ppadev ; /usr/sbin/setup_netdev.sh switch ; /usr/sbin/setup_netdev.sh port-enable )&
+(/usr/sbin/setup_netdev.sh lan-phy-enable )&
+

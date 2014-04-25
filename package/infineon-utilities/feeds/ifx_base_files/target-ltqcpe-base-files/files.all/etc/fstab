@@ -1,0 +1,8 @@
+# <file system> <mount point>   <type>  <options>               	<dump>  <pass>
+proc		/proc		proc	defaults			0	0
+/dev/mtdblock1	/firmware	squashfs	noauto,ro			0	0
+/dev/mtdblock/2	/		auto	defaults,remount,ro		1	1
+none		/dev/pts	devpts	gid=5,mode=620			0	0					
+#none		/ramdisk	tmpfs   size=5M,nr_inodes=512,mode=770  0	0			#Done through /etc/init.d/rcS
+#usbdevfs	/proc/bus/usb	usbdevfs	defaults		0	0
+none     /sys     sysfs    defaults    0     0

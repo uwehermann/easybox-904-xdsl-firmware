@@ -1,0 +1,146 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+#
+# $1 - command add/del, $2 job key/index, $3 job string for add
+
+START=12
+
+CRONTAB_DIR=/tmp/crontabs
+CRONTAB_FILE=$CRONTAB_DIR/root
+CRONTAB_CFG=/tmp/crontabs.cfg
+CRONTAB_SECT=crontab
+
+create_db() {
+	echo "!" > $CRONTAB_CFG
+}
+
+boot(){
+	mkdir -p $CRONTAB_DIR
+	rm -f $CRONTAB_FILE
+	create_db
+	start
+}
+
+start () {
+#	loglevel=$(uci_get "system.@system[0].cronloglevel")
+#	[ -z "$(ls /etc/crontabs/)" ] && exit 1
+#	mkdir -p /var/spool/cron
+#	ln -s /etc/crontabs /var/spool/cron/ 2>/dev/null
+#	crond -c /etc/crontabs -l ${loglevel:-5}
+	crond -c $CRONTAB_DIR -l 8
+}
+
+stop() {
+	pkill -9 crond
+}
+
+restart() {
+	stop
+	start
+}
+
+export_job() {
+
+	rm -f $CRONTAB_FILE
+	touch $CRONTAB_FILE
+
+	job=`umngcli -f $CRONTAB_CFG getfirst @${CRONTAB_SECT}`
+	while [ -n "$job" ] ; do
+		key=`echo "${job}" | cut -d '=' -f 1`
+		val=`echo "${job}" | cut -d '=' -f 2`
+		if [ -n "$val" ] ; then
+			echo "$val" >> $CRONTAB_FILE
+		fi
+		if [ -z "$key" ] ; then
+			break
+		fi
+		job=`umngcli -f $CRONTAB_CFG getnext ${key}@${CRONTAB_SECT}`
+	done
+}
+
+# $1 - key
+# $2 - cron job string
+add() {
+	if [ -z "$2" ] ; then
+		return 0
+	fi
+
+	if ! [ -f "$CRONTAB_CFG" ] ; then
+		create_db
+	fi
+
+	if [ "`umngcli -f $CRONTAB_CFG get ${1}@${CRONTAB_SECT}`" == "$2" ] ; then
+		return 0
+	fi
+
+	umngcli -f $CRONTAB_CFG set ${1}@${CRONTAB_SECT}="$2"
+
+	export_job
+
+	restart
+}
+
+# $1 - key
+del() {
+	if [ -z "$1" ] ; then
+		return 0
+	fi
+
+	if ! [ -f "$CRONTAB_CFG" ] ; then
+		create_db
+	fi
+
+	if [ -z "`umngcli -f $CRONTAB_CFG get ${1}@${CRONTAB_SECT}`" ] ; then
+		return 0
+	fi
+
+	umngcli -f $CRONTAB_CFG unset ${1}@${CRONTAB_SECT}
+
+	export_job
+
+	restart
+}
+
+
+case "$1" in
+	"boot")		boot; exit 0	;;
+	"start")	start; exit 0	;;
+	"stop")		stop; exit 0	;;
+	"restart")	restart; exit 0	;;
+	"add")
+				if [ -n "$3" ] ; then
+					add $2 "$3"
+					exit 0
+				fi
+				;;
+	"del")
+				if [ -n "$2" ] ; then
+					del $2
+					exit 0
+				fi
+				;;
+	"list")
+				crontask=`umngcli -f ${CRONTAB_CFG}  getfirst @${CRONTAB_SECT}`
+				while [ -n "$crontask" ] ; do
+					echo "$crontask"
+					crontask=`echo $crontask | cut -d '=' -f 1`
+					if [ -n "$crontask" ] ; then
+						crontask=`umngcli -f ${CRONTAB_CFG} getnext ${crontask}@${CRONTAB_SECT}`
+					fi
+				done
+				exit 0
+				;;
+	"listrun")
+				cat $CRONTAB_FILE
+				exit 0
+				;;
+esac
+
+echo $0 'boot                      - setup and start cron function'
+echo $0 'start                     - start cron function'
+echo $0 'stop                      - stop cron function'
+echo $0 'add <key> <cron_command>  - add cron function'
+echo $0 'del <key>                 - del cron function'
+echo $0 'list                      - list configured cron task'
+echo $0 'listrun                   - list real cron task'
+

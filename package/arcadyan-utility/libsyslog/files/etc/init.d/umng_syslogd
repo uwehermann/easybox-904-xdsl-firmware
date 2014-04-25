@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# Copyright (C) 2010 Arcadyan
+# All Rights Reserved.
+#
+#    Atheros WiFi Driver
+#
+
+START=12
+
+start()
+{
+	/usr/sbin/umng_syslogd &
+}
+
+stop()
+{
+	pkill -9 umng_syslogd
+}
+
+boot()
+{
+	start
+}
+
+
+case "$1" in
+	"boot")		boot	;;
+	"start")	start	;;
+	"stop")		stop	;;
+	*)
+				echo $0 'boot  - setup and start Syslog function'
+				echo $0 'start - start Syslog function'
+				echo $0 'stop  - stop Syslog function'
+				;;
+esac

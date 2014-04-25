@@ -1,0 +1,3 @@
+0::guest::r::guest
+1::admin::rw::admin
+2::root::rw::admin

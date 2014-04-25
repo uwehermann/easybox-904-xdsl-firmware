@@ -1,0 +1,19 @@
+LIB_VERMAJOR = 0
+LIB_VERMINOR = 1
+LIB_MAPITRNX_FILENAME = libmapitrnx.so
+
+LIB_CFLAGS  = $(CFLAGS) -shared -fPIC -I$(STAGING_DIR)/usr/include
+LIB_MAPITRNX_LDFLAGS = $(LDFLAGS) -Wl,-soname,$(LIB_MAPITRNX_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR)
+
+LIB_MAPITRNX_OBJ = mid_mapi_trnx.o
+
+all: libmapitrnx
+
+libmapitrnx:
+	$(CC) $(LIB_CFLAGS) -c -o mid_mapi_trnx.o mid_mapi_trnx.c
+	$(CC) $(LIB_CFLAGS) $(LIB_MAPITRNX_LDFLAGS) \
+		-o $(LIB_MAPITRNX_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(LIB_MAPITRNX_OBJ)
+	ln -sf $(LIB_MAPITRNX_FILENAME).$(LIB_VERMAJOR).$(LIB_VERMINOR) $(LIB_MAPITRNX_FILENAME)
+
+clean:
+	rm -f $(LIB_MAPITRNX_FILENAME) *.o

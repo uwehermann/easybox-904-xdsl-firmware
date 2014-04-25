@@ -1,0 +1,225 @@
+#!/bin/ash
+# Note :
+#   Version :
+#		1.1		daniel  2010/06/15 09:50
+#
+#	Changlog :
+#		0.1 	daniel  2010/06/09 17:26
+#		1.0		daniel  2010/06/11 17:02
+#		1.1		daniel  2010/06/15 09:50
+#
+#	Bug :
+#		v1.0 :
+#			1. if there is any empty SSID in front of AP_SSID_4, the AP_SSID_4 will get error
+#			2. the setting of lan dhcp range is wrong in dhcp.conf  ===> fixed in v1.1
+#
+#
+#
+#
+#
+. /usr/sbin/iptables_utility.sh
+# some API(function)
+# get AP_SSID
+getname()
+{
+	if [ $1 -eq 2 ] ; then
+		name=${AP_SSID_2}
+	elif [ $1 -eq 3 ] ; then
+		name=${AP_SSID_3}
+	elif [ $1 -eq 4 ] ; then
+		name=${AP_SSID_4}
+	elif [ $1 -eq 5 ] ; then
+		name=${AP_SSID_5}
+	else
+		name=
+	fi
+
+}
+
+# it must be hard code, cause method 1 does not work, method 2 will hang up th system, but the range is dynamic.
+# so the final method is generate another script, then execute it
+replace_dhcp_conf()
+{
+	row=${1}
+	start=${2}
+	end=${3}
+	leasetime=${4}
+
+	let "row+=1"
+	echo "sed -i '${row}s/.*/\toption start \t\"${start}\"/' /etc/config/dhcp" >> /tmp/replace_dhcp_conf.sh
+	let "row+=1"
+	echo "sed -i '${row}s/.*/\toption limit\t\"${end}\"/' /etc/config/dhcp" >> /tmp/replace_dhcp_conf.sh
+	let "row+=1"
+	echo "sed -i '${row}s/.*/\toption leasetime\t\"${leasetime}\"/' /etc/config/dhcp" >> /tmp/replace_dhcp_conf.sh
+
+}
+# method hard code
+# br-lan 16 br-redo 23 br-redx 30
+#	if [ ${interface} = "br-lan" ] ; then
+#		sed '$17s/.*/\toption start\t \"${start}\"/' /etc/config/dhcp
+#		sed '${row}s/.*/\toption limit\t \"${end}\"/' /etc/config/dhcp
+#		sed '${row}s/.*/\toption leasetime\t \"${leasetime}\"/' /etc/config/dhcp
+#		...
+# method 1
+#	sed '${row}s/.*/\toption start\t \"${start}\"/' /etc/config/dhcp
+#	sed '${row}s/.*/\toption limit\t \"${end}\"/' /etc/config/dhcp
+#	sed '${row}s/.*/\toption leasetime\t \"${leasetime}\"/' /etc/config/dhcp
+# method 2
+#	cmd="sed '${row}s/.*/\toption start\t \"${start}\"/' /etc/config/dhcp"
+#	exec $cmd
+#	cmd="sed '${row}s/.*/\toption limit\t \"${end}\"/' /etc/config/dhcp"
+#	exec $cmd
+#	cmd="sed '${row}s/.*/\toption leasetime\t \"${leasetime}\"/' /etc/config/dhcp"
+#	exec $cmd
+
+
+# wireless disable, ifdown br-redo and br-redx
+apdown
+ifconfig br-redo down
+ifconfig br-redx down
+
+# get config
+redo_enable=`umngcli get redo_enable@wireless`
+redx_enable=`umngcli get redx_enable@wireless`
+redo_bind=`umngcli get redo_bind@wireless | sed 's/,/ /g'`
+redx_bind=`umngcli get redx_bind@wireless | sed 's/,/ /g'`
+AP_SSID_2=`umngcli get ath1_SSID@wireless`
+AP_SSID_3=`umngcli get ath2_SSID@wireless`
+AP_SSID_4=`umngcli get ath3_SSID@wireless`
+AP_SSID_5=`umngcli get ath4_SSID@wireless`
+redo_ip=`umngcli get redo_ip@wireless`
+redx_ip=`umngcli get redx_ip@wireless`
+redo_dhcp_s=`umngcli get redo_dhcppool_s@wireless`
+redo_dhcp_e=`umngcli get redo_dhcppool_e@wireless`
+redo_dhcp_lease=`umngcli get redo_dhcplease@wireless`
+redx_dhcp_s=`umngcli get redx_dhcppool_s@wireless`
+redx_dhcp_e=`umngcli get redx_dhcppool_e@wireless`
+redx_dhcp_lease=`umngcli get redx_dhcplease@wireless`
+lan_dhcp_ip=`umngcli get ip4addr@lan0`
+lan_dhcp_s=`umngcli get dhcp4pool_s@lan0`
+lan_dhcp_e=`umngcli get dhcp4pool_e@lan0`
+lan_dhcp_lease=`umngcli get dhcp4lease@lan0`
+
+
+# the followed is for wireless config number
+redo_bind_cfg=${redo_bind}
+redx_bind_cfg=${redx_bind}
+
+# wireless start
+if [ $redo_enable -eq 0 ] ; then
+	for i in $redo_bind_cfg
+	do
+		cfg -a AP_SSID_${i}=
+		umngcli set AP_SSID_${i}@wireless=
+	done
+else
+	for i in $redo_bind_cfg
+	do
+		getname ${i}
+		cfg -a AP_SSID_${i}=${name}
+		umngcli set AP_SSID_${i}@wireless=${name}
+	done
+fi
+
+if [ $redx_enable -eq 0 ] ; then
+	for i in $redx_bind_cfg
+	do
+		cfg -a AP_SSID_${i}=
+		umngcli set AP_SSID_${i}@wireless=
+	done
+else
+	for i in $redx_bind_cfg
+	do
+		getname ${i}
+		cfg -a AP_SSID_${i}=${name}
+		umngcli set AP_SSID_${i}@wireless=${name}
+	done
+fi
+
+apup
+
+
+# remove ath1~ath4 from br-lan, add br-redo br-redx
+brctl delif br-lan ath1
+brctl delif br-lan ath2
+brctl delif br-lan ath3
+brctl delif br-lan ath4
+brctl addbr br-redo
+brctl addbr br-redx
+
+# add ath1~ath4 to red zone, if it is enabled
+# then enable red zone, set the ip
+# cause the iterface num does not match SSID num, so we need get interface from ssid (reverse)
+if [ $redo_enable -eq 1 ] ; then
+	for i in $redo_bind
+	do
+		getname ${i}
+		redo_bind_interface=`iwconfig | grep ${name} | awk '{print $1}'`
+		if [ ${redo_bind_interface%?} = "ath" ] ; then
+			brctl addif br-redo ${redo_bind_interface}
+		fi
+	done
+	ifconfig br-redo up
+	ifconfig br-redo ${redo_ip} netmask 255.255.255.0
+fi
+
+if [ $redx_enable -eq 1 ] ; then
+	for i in $redx_bind
+	do
+		getname ${i}
+		redx_bind_interface=`iwconfig | grep ${name} | awk '{print $1}'`
+		if [ ${redx_bind_interface%?} = "ath" ] ; then
+			brctl addif br-redx ${redx_bind_interface}
+		fi
+	done
+	ifconfig br-redx up
+	ifconfig br-redx ${redx_ip} netmask 255.255.255.0
+fi
+
+
+# set dnsmasq config
+/etc/init.d/dnsmasq stop
+echo "interface=br-lan" > /etc/dnsmasq.conf
+echo "interface=br-redo" >> /etc/dnsmasq.conf
+echo "interface=br-redx" >> /etc/dnsmasq.conf
+echo "dhcp-range=br-lan,${lan_dhcp_s},${lan_dhcp_e},${lan_dhcp_lease}" >> /etc/dnsmasq.conf
+echo "dhcp-range=br-redo,${redo_ip%.*}.${redo_dhcp_s},${redo_ip%.*}.${redo_dhcp_e},${redo_dhcp_lease}" >> /etc/dnsmasq.conf
+echo "dhcp-range=br-redx,${redx_ip%.*}.${redx_dhcp_s},${redx_ip%.*}.${redx_dhcp_e},${redx_dhcp_lease}" >> /etc/dnsmasq.conf
+
+#### set dhcp.conf
+echo > /tmp/dhcp.leases
+echo "#!/bin/ash" > /tmp/replace_dhcp_conf.sh
+tmp=`grep -n br-lan /etc/config/dhcp`
+num=${tmp%%:*}
+lan_dhcp_s=${lan_dhcp_s##*.}
+lan_dhcp_e=${lan_dhcp_e##*.}
+replace_dhcp_conf ${num} ${lan_dhcp_s:=2} ${lan_dhcp_e:=254} ${lan_dhcp_lease:=86400s}
+tmp=`grep -n br-redo /etc/config/dhcp`
+num=${tmp%%:*}
+replace_dhcp_conf ${num} ${redo_dhcp_s:=2} ${redo_dhcp_e:=254} ${redo_dhcp_lease:=86400s}
+tmp=`grep -n br-redx /etc/config/dhcp`
+num=${tmp%%:*}
+replace_dhcp_conf ${num} ${redx_dhcp_s:=2} ${redx_dhcp_e:=254} ${redx_dhcp_lease:=86400s}
+/bin/ash /tmp/replace_dhcp_conf.sh
+rm -f /tmp/replace_dhcp_conf.sh
+/etc/init.d/dnsmasq start
+
+
+Zone1="br-redo br-redx"
+Zone2="br-lan"
+ipt_lock_res
+for Zone1E in $Zone1
+do
+	for Zone2E in $Zone2
+	do
+		iptables -t filter -I FORWARD -i $Zone1E -o $Zone2E -j DROP
+		iptables -t filter -I FORWARD -o $Zone1E -i $Zone2E -j DROP
+	done
+done
+iptables -t filter -I INPUT -s 10.0.0.0/8 -d 192.168.2.1/24 -j DROP
+iptables -t filter -I INPUT -d 10.0.0.0/8 -s 192.168.2.1/24 -j DROP
+ipt_unlock_res
+
+
+
+

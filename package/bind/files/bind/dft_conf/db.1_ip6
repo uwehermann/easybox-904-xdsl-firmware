@@ -1,0 +1,23 @@
+; *************************************************************** ;
+; 
+; Version : 1.0.2
+; Date    : 2009/04/02
+; Author  : kevin cheng
+; E-mail  : kevin_cheng@arcadyan.com.tw
+;
+; *************************************************************** ;
+
+;
+; BIND reverse zone datafile for ::1
+;
+$TTL	604800
+@	IN	SOA	localhost. root.localhost. (
+			      1		; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+@	IN	NS	localhost.
+	IN	PTR	localhost.
+

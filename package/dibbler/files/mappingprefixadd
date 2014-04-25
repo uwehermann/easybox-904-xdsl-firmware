@@ -1,0 +1,128 @@
+#!/bin/sh
+
+COMMENTED=^[[:blank:]]*#
+arg0=${0##*/}
+
+# $1 stores the prefix (the input parameter of mappingprefixadd) 
+PD_result=$1
+
+# modify Intif to fit your environment
+LANif=br-lan
+
+# the subperfix len of LAN is always 64 (may be changed if the device allows prefix delegation from LAN)
+Subprefix_len=64
+
+# $Subprefix is to be used in sed, so the '/' need to be escaped especially
+Subprefix="$PD_result\/$Subprefix_len"
+#echo "Subprefix $Subprefix"
+
+# global address of the LAN link 
+LLA=`ifconfig $LANif | grep 'Scope:Link' | awk '{print $3}'`
+# compose the GUA prefix and the EUI-64 part
+pd4=`echo $PD_result | cut -d':' -f4`
+if [ -z $pd4 ]; then
+    LANaddrv6=`echo $PD_result$LLA | sed 's!::.*::!::!`
+else
+    LANaddrv6=`echo $PD_result$LLA | sed 's!::.*::!:!`
+fi
+
+echo "$LANif subnet prefix: $1/$Subprefix_len"
+
+# check existing GUA
+GUA=`ifconfig $LANif | grep ' [23].*Global' | awk '{print $3}'`
+GUA_prefix4=`echo $GUA | cut -c1-1`
+echo "get existing GUA: $GUA, GUA/4: $GUA_prefix4"
+
+# del old GUA
+if [ "$GUA_prefix4" == "2" -o "$GUA_prefix4" == "3" ]; then
+    ifconfig $LANif del $GUA
+fi
+# add an IPv6 address for the internal interface
+ifconfig $LANif add $LANaddrv6
+
+#restart internal DNS server
+echo "restart internal name server"
+/etc/init.d/named restart
+
+# change M flag from off to on if necessary
+grep -q "option AdvManagedFlag[[:blank:]]*1" /etc/config/radvd
+if [ $? -eq 0 ]; then
+    sed 's/AdvManagedFlag[ '$'\t'']*off/AdvManagedFlag on/g' /var/etc/radvd.conf > /var/etc/radvd.conf.tmp
+    mv -f /var/etc/radvd.conf.tmp /var/etc/radvd.conf
+fi
+
+# replace the GUA prefix configuration in /var/etc/radvd.conf
+valid_time=$(grep AdvValidLifetime /etc/config/radvd | awk '{ print $3}')
+preferred_time=$(grep AdvPreferredLifetime /etc/config/radvd | awk '{ print $3}')
+PREFIX_OPTION="\tprefix $Subprefix\n\t{\n\t\tAdvValidLifetime $valid_time;\n\t\tAdvPreferredLifetime $preferred_time;\n\t\tAdvOnLink on;\n\t\tAdvAutonomous on;\n\t\tAdvRouterAddr off;\n\t};"
+#echo "$PREFIX_OPTION"
+
+set -- $(awk "BEGIN { SEC_B=0 } /$COMMENTED/ { next; } /prefix[[:blank:]]*[23].*/ { SEC_B=NR } /^[[:blank:]]*\}/ { if(SEC_B!=0) { print 1, SEC_B, NR; exit; } } END { print 0 }" /var/etc/radvd.conf)
+found=$1
+if [ "$found" == "1" ]; then
+    LB=$2
+    LE=$3
+    eval "sed -e '$LB,$LE d' /var/etc/radvd.conf > /var/etc/radvd.conf.tmp"
+    eval "sed -e '$LB i\#tag-to-ins' /var/etc/radvd.conf.tmp | sed 's/^#tag-to-ins/$PREFIX_OPTION/g' > /var/etc/radvd.conf"
+    rm /var/etc/radvd.conf.tmp
+else
+    eval "sed -e '/AdvOtherConfigFlag/a\#tag-to-ins' /var/etc/radvd.conf | sed 's/^#tag-to-ins/$PREFIX_OPTION/g' > /var/etc/radvd.conf.tmp"
+    mv -f /var/etc/radvd.conf.tmp /var/etc/radvd.conf
+fi
+
+# (re)start radvd
+#/etc/init.d/radvd restart || /etc/init.d/radvd start
+killall -q -KILL radvd
+rm /var/run/radvd.pid
+radvd -C /var/etc/radvd.conf -m stderr_syslog -p /var/run/radvd.pid
+
+# update IA_NA pool in /var/etc/dibbler/server.conf
+IA_NA_POOL="\tclass {\n\t\tpool $Subprefix\n\t}"
+set -- $(awk "BEGIN { SEC_B=0 } /$COMMENTED/ { next; } /stateless/ { print 0, NR; exit; } /^[[:blank:]]*class/ { SEC_B=NR } /^[[:blank:]]*\}/ { if(SEC_B!=0) { print 1, SEC_B, NR; exit; } } END { print 2 }" /var/etc/dibbler/server.conf)
+stateful=$1
+case $stateful in
+    "0")
+        # stateless, check if it's needed to switch to stateful
+        LB=$2
+        grep -v "$COMMENTED" /etc/config/dibbler/server.conf | grep -q 'stateless'
+        if [ $? -eq 1 ]; then
+            eval "sed -e '$LB,$LB d' /var/etc/dibbler/server.conf > /var/etc/dibbler/server.conf.tmp"
+            eval "sed -e '/valid-lifetime/a\#tag-to-ins' /var/etc/dibbler/server.conf.tmp | sed 's/^#tag-to-ins/$IA_NA_POOL/g' > /var/etc/dibbler/server.conf"
+            rm /var/etc/dibbler/server.conf.tmp
+        fi
+        ;;
+    "1")
+        # stateful with IA_NA pool, replace it
+        LB=$2
+        LE=$3
+        eval "sed -e '$LB,$LE d' /var/etc/dibbler/server.conf > /var/etc/dibbler/server.conf.tmp"
+        eval "sed -e '$LB i\#tag-to-ins' /var/etc/dibbler/server.conf.tmp | sed 's/^#tag-to-ins/$IA_NA_POOL/g' > /var/etc/dibbler/server.conf"
+        rm /var/etc/dibbler/server.conf.tmp
+        ;;
+    "2")
+        # stateful with no IA_NA pool, should not happen
+        echo "stateful DHCPv6 server w/o IA_NA pool"
+        ;;
+    *)
+        ;;
+esac
+
+#set -- $(awk 'BEGIN { LB=0 } /^[ \t#]*class/ { LB=NR } /^[ \t#]*\}/ { if(LB!=0) { print LB, NR; exit; } }' /var/etc/dibbler/server.conf)
+#LB=$1
+#LE=$2
+## skip comments and try to find "stateless"
+#grep -v '^[ '$'\t'']*#' /var/etc/dibbler/server.conf | grep -q 'stateless'
+#if [ $? -eq 1 ]; then
+#    eval "sed -e '$LB,$LE d' /var/etc/dibbler/server.conf > /var/etc/dibbler/server.conf.tmp"
+#    eval "sed -e '$LB i\#tag-to-ins' /var/etc/dibbler/server.conf.tmp | sed 's/^#tag-to-ins/$IA_NA_POOL/g' > /var/etc/dibbler/server.conf"
+#    rm /var/etc/dibbler/server.conf.tmp  
+#fi
+
+# (re)start dibbler-server
+dibbler-server stop
+dibbler-server start
+
+# show ipv6 addresses and routes
+#ip -6 addr show
+#ip -6 route show
+

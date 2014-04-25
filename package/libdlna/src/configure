@@ -1,0 +1,703 @@
+#!/bin/sh
+#
+# libdlna configure script - (c) 2007 Benjamin Zores
+#
+#  (fully inspirated from ffmpeg configure script, thanks to Fabrice Bellard)
+#
+
+# make sure we are running under a compatible shell
+unset foo
+(: ${foo%%bar}) 2>/dev/null && ! (: ${foo?}) 2>/dev/null
+if test "$?" != 0; then
+    if test "x$OMC_CONFIGURE_EXEC" = x; then
+        OMC_CONFIGURE_EXEC=1
+        export OMC_CONFIGURE_EXEC
+        exec bash "$0" "$@"
+        exec ksh "$0" "$@"
+        exec /usr/xpg4/bin/sh "$0" "$@"
+    fi
+    echo "No compatible shell script interpreter found."
+    exit 1
+fi
+
+show_help(){
+  echo "Usage: configure [options]"
+  echo "Options: [defaults in brackets after descriptions]"
+  echo
+  echo "Standard options:"
+  echo "  --help                      print this message"
+  echo "  --log[=FILE|yes|no]         log tests and output to FILE [config.log]"
+  echo "  --prefix=PREFIX             install in PREFIX [$PREFIX]"
+  echo "  --libdir=DIR                install libs in DIR [PREFIX/lib]"
+  echo "  --includedir=DIR            install includes in DIR [PREFIX/include]"
+  echo "  --enable-static             build static libraries [default=yes]"
+  echo "  --disable-static            do not build static libraries [default=no]
+"
+  echo "  --enable-shared             build shared libraries [default=yes]"
+  echo "  --disable-shared            do not build shared libraries [default=no]"
+  echo "  --with-ffmpeg-dir=DIR       check for ffmpeg installed in DIR"
+  echo ""
+  echo "Advanced options (experts only):"
+  echo "  --enable-debug              enable debugging symbols"
+  echo "  --disable-debug             disable debugging symbols"
+  echo "  --disable-strip             disable stripping of executables at installation"
+  echo "  --disable-optimize          disable compiler optimization"
+  echo "  --cross-prefix=PREFIX       use PREFIX for compilation tools [$cross_prefix]"
+  echo "  --cross-compile             assume a cross-compiler is used"
+  exit 1
+}
+
+log(){
+    echo "$@" >>$logfile
+}
+
+log_file(){
+    log BEGIN $1
+    cat -n $1 >>$logfile
+    log END $1
+}
+
+echolog(){
+    log "$@"
+    echo "$@"
+}
+
+clean(){
+    rm -f $TMPC $TMPO $TMPE $TMPS
+}
+
+die(){
+    echolog "$@"
+    if enabled logging; then
+      echo "See file \"$logfile\" produced by configure for more details."
+    else
+      echo "Rerun configure with logging enabled (do not use --log=no) for more details."
+    fi
+    clean
+    exit 1
+}
+
+enabled(){
+    eval test "x\$$1" = "xyes"
+}
+
+flags_saved(){
+    (: ${SAVE_CFLAGS?}) 2>/dev/null
+}
+
+save_flags(){
+    flags_saved && return
+    SAVE_CFLAGS="$CFLAGS"
+    SAVE_LDFLAGS="$LDFLAGS"
+    SAVE_extralibs="$extralibs"
+}
+
+restore_flags(){
+    CFLAGS="$SAVE_CFLAGS"
+    LDFLAGS="$SAVE_LDFLAGS"
+    extralibs="$SAVE_extralibs"
+    unset SAVE_CFLAGS
+    unset SAVE_LDFLAGS
+    unset SAVE_extralibs
+}
+
+temp_cflags(){
+    temp_append CFLAGS "$@"
+}
+
+temp_ldflags(){
+    temp_append LDFLAGS "$@"
+}
+
+temp_extralibs(){
+    temp_append extralibs "$@"
+}
+
+temp_append(){
+    local var
+    var=$1
+    shift
+    save_flags
+    append_var "$var" "$@"
+}
+
+append_var(){
+    local var f
+    var=$1
+    shift
+    for f in $@; do
+      if eval echo \$$var | grep -qv -e "$f"; then
+        eval "$var=\"\$$var $f\""
+      fi
+    done
+}
+
+append(){
+    local var
+    var=$1
+    shift
+    flags_saved && append_var "SAVE_$var" "$@"
+    append_var "$var" "$@"
+}
+
+add_cflags(){
+    append CFLAGS "$@"
+}
+
+add_ldflags(){
+    append LDFLAGS "$@"
+}
+
+add_extralibs(){
+    append extralibs "$@"
+}
+
+check_cmd(){
+    log "$@"
+    "$@" >>$logfile 2>&1
+}
+
+check_cc(){
+    log check_cc "$@"
+    cat >$TMPC
+    log_file $TMPC
+    check_cmd $cc $CFLAGS "$@" -c -o $TMPO $TMPC
+}
+
+check_cpp(){
+    log check_cpp "$@"
+    cat >$TMPC
+    log_file $TMPC
+    check_cmd $cc $CFLAGS "$@" -E -o $TMPO $TMPC
+}
+
+check_ld(){
+    log check_ld "$@"
+    check_cc || return
+    check_cmd $cc $LDFLAGS "$@" -o $TMPE $TMPO $extralibs
+}
+
+check_exec(){
+    check_ld "$@" && { enabled cross_compile || $TMPE >>$logfile 2>&1; }
+}
+
+check_cflags(){
+    log check_cflags "$@"
+    check_cc "$@" <<EOF && add_cflags "$@"
+int x;
+EOF
+}
+
+check_ldflags(){
+    log check_ldflags "$@"
+    check_ld "$@" <<EOF && add_ldflags "$@"
+int main(){
+    return 0;
+}
+EOF
+}
+
+check_header(){
+    local header
+    log check_header "$@"
+    header=$1
+    shift
+    check_cpp "$@" <<EOF
+#include <$header>
+int x;
+EOF
+}
+
+check_func(){
+    local func
+    log check_func "$@"
+    func=$1
+    shift
+    check_ld "$@" <<EOF
+extern int $func();
+int main(){
+    $func();
+    return 0;
+}
+EOF
+}
+
+check_lib(){
+    local header func err
+    log check_lib "$@"
+    header="$1"
+    func="$2"
+    shift 2
+    temp_extralibs "$@"
+    check_header $header && check_func $func && add_extralibs "$@"
+    err=$?
+    restore_flags
+    return $err
+}
+
+check_libconfig(){
+    local config func ccflags clibs err
+    log check_libconfig "$@"
+    config="$1"
+    func="$2"
+    ccflags="${3:---cflags}"
+    clibs="${4:---libs}"
+    err=1
+    if `which "$config" 1>/dev/null 2>&1`; then
+      cflags=`$config $ccflags`
+      [ -n "$cflags" ] && check_cflags "$cflags"
+      libs=`$config $clibs`
+      if [ -n "$libs" ]; then
+        temp_extralibs "$libs"
+        check_func $func && add_extralibs "$libs"
+        err=$?
+        restore_flags
+      fi
+    fi
+    return $err
+}
+
+append_config(){
+    echo "$@" >> $CONFIGFILE
+}
+
+pkgconfig_generate(){
+name=$1
+comment=$2
+version=$3
+libs=$4
+requires=$5
+cat <<EOF >$name.pc
+prefix=$PREFIX
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: $name
+Description: $comment
+Version: $version
+Requires: $requires
+Conflicts:
+Libs: -L\${libdir} $libs
+Cflags: -I\${includedir}
+EOF
+}
+
+
+# set temporary file name
+if test ! -z "$TMPDIR" ; then
+    TMPDIR1="${TMPDIR}"
+elif test ! -z "$TEMPDIR" ; then
+    TMPDIR1="${TEMPDIR}"
+else
+    TMPDIR1="/tmp"
+fi
+
+TMPC="${TMPDIR1}/libdlna-${RANDOM}-$$-${RANDOM}.c"
+TMPO="${TMPDIR1}/libdlna-${RANDOM}-$$-${RANDOM}.o"
+TMPE="${TMPDIR1}/libdlna-${RANDOM}-$$-${RANDOM}"
+TMPS="${TMPDIR1}/libdlna-${RANDOM}-$$-${RANDOM}.S"
+
+CONFIGFILE="config.mak"
+
+#################################################
+#   set default parameters
+#################################################
+logging="yes"
+logfile="config.log"
+PREFIX="/usr/local"
+libdir='$(PREFIX)/lib'
+includedir='$(PREFIX)/include'
+static="yes"
+shared="yes"
+cc="gcc"
+ar="ar"
+ranlib="ranlib"
+make="make"
+strip="strip"
+cpu=`uname -m`
+optimize="yes"
+debug="no"
+dostrip="yes"
+extralibs=""
+installstrip="-s"
+cross_compile="no"
+INSTALL="/usr/bin/install -c"
+VERSION=""
+
+#################################################
+#   set cpu variable and specific cpu flags
+#################################################
+case "$cpu" in
+  i386|i486|i586|i686|i86pc|BePC)
+    cpu="x86"
+  ;;
+  x86_64|amd64)
+    cpu="x86"
+    canon_arch="`$cc -dumpmachine | sed -e 's,\([^-]*\)-.*,\1,'`"
+    if [ x"$canon_arch" = x"x86_64" -o x"$canon_arch" = x"amd64" ]; then
+      if [ -z "`echo $CFLAGS | grep -- -m32`"  ]; then
+        cpu="x86_64"
+      fi
+    fi
+  ;;
+# armv4l is a subset of armv5tel
+  arm|armv4l|armv5tel)
+    cpu="armv4l"
+  ;;
+  alpha)
+    cpu="alpha"
+  ;;
+  "Power Macintosh"|ppc|ppc64|powerpc)
+    cpu="powerpc"
+  ;;
+  mips|mipsel|IP*)
+    cpu="mips"
+  ;;
+  sun4u|sparc64)
+    cpu="sparc64"
+  ;;
+  sparc)
+    cpu="sparc"
+  ;;
+  sh4)
+    cpu="sh4"
+  ;;
+  parisc|parisc64)
+    cpu="parisc"
+  ;;
+  s390|s390x)
+    cpu="s390"
+  ;;
+  m68k)
+    cpu="m68k"
+  ;;
+  ia64)
+    cpu="ia64"
+  ;;
+  bfin)
+    cpu="bfin"
+  ;;
+  *)
+    cpu="unknown"
+  ;;
+esac
+
+
+#################################################
+#   check options
+#################################################
+for opt do
+  optval="${opt#*=}"
+  case "$opt" in
+  --log)
+  ;;
+  --log=*) logging="$optval"
+  ;;
+  --prefix=*) PREFIX="$optval"; force_prefix=yes
+  ;;
+  --libdir=*) libdir="$optval"; force_libdir=yes
+  ;;
+  --includedir=*) includedir="$optval"
+  ;;
+  --enable-static) static="yes"
+  ;;
+  --disable-static) static="no"
+  ;;
+  --enable-shared) shared="yes"
+  ;;
+  --disable-shared) shared="no"
+  ;;
+  --enable-debug) debug="yes"
+  ;;
+  --disable-debug) debug="no"
+  ;;
+  --disable-strip) dostrip="no"
+  ;;
+  --disable-optimize) optimize="no"
+  ;;
+  --cross-prefix=*) cross_prefix="$optval"
+  ;;
+  --cross-compile) cross_compile="yes"
+  ;;
+  --with-ffmpeg-dir=*) ffmpegdir="$optval";
+  ;;
+  --help) show_help
+  ;;
+  *)
+  echo "Unknown option \"$opt\"."
+  echo "See $0 --help for available options."
+  exit 1
+  ;;
+  esac
+done
+
+# Check for conflictual build options
+if [ "$shared" = no -a "$static" = no ]; then
+  echo "At least one library type must be built."
+  echo "Specify --enable-static to build the static libraries or"
+  echo "--enable-shared to build the shared libraries as well."
+  exit 1
+fi
+
+if [ -n "$cross_prefix" ]; then
+  cross_compile="yes"
+  cc="${cross_prefix}${cc}"
+  ar="${cross_prefix}${ar}"
+  ranlib="${cross_prefix}${ranlib}"
+  strip="${cross_prefix}${strip}"
+else
+  [ -n "$CC" ] && cc="$CC"
+  [ -n "$AR" ] && ar="$AR"
+  [ -n "$RANLIB" ] && ranlib="$RANLIB"
+  [ -n "$STRIP" ] && strip="$STRIP"
+fi
+[ -n "$MAKE" ] && make="$MAKE"
+
+#################################################
+#   create logging file
+#################################################
+if test "$logging" != no; then
+  enabled logging || logfile="$logging"
+  echo "# $0 $@" >$logfile
+  set >>$logfile
+else
+  logfile=/dev/null
+fi
+
+#################################################
+#   compiler sanity check
+#################################################
+echolog "Checking for compiler available..."
+check_exec <<EOF
+int main(){
+    return 0;
+}
+EOF
+if test "$?" != 0; then
+  echo "$cc is unable to create an executable file."
+  if test -z "$cross_prefix" -a "$cross_compile" = no; then
+    echo "If $cc is a cross-compiler, use the --cross-compile option."
+  fi
+  die "C compiler test failed."
+fi
+
+#################################################
+#   check for target specific flags
+#################################################
+# check for SIMD availability
+
+# AltiVec flags: The FSF version of GCC differs from the Apple version
+if test $cpu = "powerpc"; then
+  if test $altivec = "yes"; then
+    if test -n "`$cc -v 2>&1 | grep version | grep Apple`"; then
+      add_cflags "-faltivec"
+    else
+      add_cflags "-maltivec -mabi=altivec"
+    fi
+  fi
+fi
+
+check_header altivec.h && _altivec_h=yes || _altivec_h=no
+
+# check if our compiler supports Motorola AltiVec C API
+if enabled altivec; then
+  if enabled _altivec_h; then
+    inc_altivec_h="#include <altivec.h>"
+  else
+    inc_altivec_h=
+  fi
+  check_cc <<EOF || altivec=no
+$inc_altivec_h
+int main(void) {
+    vector signed int v1, v2, v3;
+    v1 = vec_add(v2,v3);
+    return 0;
+}
+EOF
+fi
+
+# mmi only available on mips
+if [ "$mmi" = "default" ]; then
+  if [ "$cpu" = "mips" ]; then
+    mmi="yes"
+  else
+    mmi="no"
+  fi
+fi
+
+# check if our compiler supports mmi
+enabled mmi && check_cc <<EOF || mmi="no"
+int main(void) {
+    __asm__ ("lq \$2, 0(\$2)");
+    return 0;
+}
+EOF
+
+# test gcc version to see if vector builtins can be used
+# currently only used on i386 for MMX builtins
+check_cc -msse <<EOF && builtin_vector=yes || builtin_vector=no
+#include <xmmintrin.h>
+int main(void) {
+#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 2)
+return 0;
+#else
+#error no vector builtins
+#endif
+}
+EOF
+
+# test for mm3dnow.h
+test "$cpu" = "x86_64" && march=k8 || march=athlon
+check_cc -march=$march <<EOF && mm3dnow=yes || mm3dnow=no
+#include <mm3dnow.h>
+int main(void) {
+__m64 b1;
+b1 = _m_pswapd(b1);
+_m_femms();
+return 0;
+}
+EOF
+
+# ---
+# big/little-endian test
+if test "$cross_compile" = "no"; then
+  check_ld <<EOF || die "endian test failed" && $TMPE && bigendian="yes"
+#include <inttypes.h>
+int main(int argc, char ** argv){
+        volatile uint32_t i=0x01234567;
+        return (*((uint8_t*)(&i))) == 0x67;
+}
+EOF
+else
+# programs cannot be launched if cross compiling, so make a static guess
+  if test "$cpu" = "powerpc" -o "$cpu" = "mips" ; then
+    bigendian="yes"
+  fi
+fi
+
+# add some useful compiler flags if supported
+check_cflags -W
+check_cflags -Wall
+check_cflags -D_LARGEFILE_SOURCE
+check_cflags -D_FILE_OFFSET_BITS=64
+check_cflags -D_REENTRANT
+
+#################################################
+#   check for debug symbols
+#################################################
+if enabled debug; then
+  add_cflags -g3
+  add_cflags -DHAVE_DEBUG
+  dostrip=no
+fi
+
+if enabled optimize; then
+  if test -n "`$cc -v 2>&1 | grep xlc`"; then
+    add_cflags  "-O5"
+    add_ldflags "-O5"
+  else
+    add_cflags "-O3"
+  fi
+fi
+
+#################################################
+#   check for ffmpeg libavformat/libavcodec
+#################################################
+if [ -n "$ffmpegdir" ]; then
+  check_cflags -I$ffmpegdir
+  check_ldflags -L$ffmpegdir
+fi
+
+echolog "Checking for libavformat ..."
+check_lib ffmpeg/avformat.h av_register_all -lavformat || die "Error, can't find libavformat !"
+echolog "Checking for libavcodec ..."
+check_lib ffmpeg/avcodec.h avcodec_register_all -lavcodec || die "Error, can't find libavcodec !"
+
+#################################################
+#   version
+#################################################
+temp_cflags "-Isrc"
+check_ld <<EOF
+#include <stdio.h>
+#include <dlna.h>
+int main(){
+  printf(DLNA_STRINGIFY(LIBDLNA_VERSION));
+  printf("\n");
+  return 0;
+}
+EOF
+VERSION=`$TMPE`
+restore_flags
+
+
+#################################################
+#   logging result
+#################################################
+echolog ""
+echolog "libdlna: configure is OK"
+echolog "  version            $VERSION"
+echolog "configuration:"
+echolog "  install prefix     $PREFIX"
+echolog "  C compiler         $cc"
+echolog "  AR                 $ar"
+echolog "  RANLIB             $ranlib"
+echolog "  STRIP              $strip"
+echolog "  make               $make"
+echolog "  CPU                $cpu ($tune)"
+echolog "  debug symbols      $debug"
+echolog "  strip symbols      $dostrip"
+echolog "  optimize           $optimize"
+echolog "  static             ${static}"
+echolog "  shared             ${shared}"
+echolog ""
+echolog "  CFLAGS             $CFLAGS"
+echolog "  LDFLAGS            $LDFLAGS"
+echolog "  extralibs          $extralibs"
+echolog ""
+
+#################################################
+#   save configs attributes
+#################################################
+echolog "Creating config.mak ..."
+
+echo "# Automatically generated by configure - do not modify!" > $CONFIGFILE
+
+append_config "VERSION=$VERSION"
+
+append_config "PREFIX=$PREFIX"
+append_config "prefix=\$(DESTDIR)\$(PREFIX)"
+append_config "libdir=\$(DESTDIR)$libdir"
+append_config "includedir=\$(DESTDIR)$includedir"
+
+append_config "MAKE=$make"
+append_config "CC=$cc"
+append_config "AR=$ar"
+append_config "RANLIB=$ranlib"
+
+append_config "BUILD_STATIC=$static"
+append_config "BUILD_SHARED=$shared"
+
+append_config "LN=ln"
+if enabled dostrip; then
+  append_config "STRIP=$strip"
+  append_config "INSTALLSTRIP=$installstrip"
+else
+  append_config "STRIP=echo ignoring strip"
+  append_config "INSTALLSTRIP="
+fi
+append_config "EXTRALIBS=$extralibs"
+
+append_config "OPTFLAGS=$CFLAGS"
+append_config "LDFLAGS=$LDFLAGS"
+append_config "INSTALL=$INSTALL"
+
+append_config "DEBUG=$debug"
+
+#################################################
+#   make pkg-config files
+#################################################
+pkgconfig_generate libdlna "DLNA (Digital Living Network Alliance) library" "$VERSION" "-ldlna $extralibs" "libavformat libavcodec"
+
+clean
+exit 0

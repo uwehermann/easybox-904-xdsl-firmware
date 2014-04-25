@@ -1,0 +1,176 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006 OpenWrt.org
+
+START=11 #10, ctc
+### ctc ###
+#STOP=98
+###########
+
+DefPassword="defaultusername"
+DefPrefixUsername="defaultpassword"
+system_config() {
+	local cfg="$1"
+
+	local hostname conloglevel timezone
+
+	config_get hostname "$cfg" hostname 'OpenWrt'
+	echo "$hostname" > /proc/sys/kernel/hostname
+
+	config_get conloglevel "$cfg" conloglevel
+	config_get buffersize "$cfg" buffersize
+	[ -z "$conloglevel" -a -z "$buffersize" ] || dmesg ${conloglevel:+-n $conloglevel} ${buffersize:+-s $buffersize}
+	
+	config_get timezone "$cfg" timezone 'UTC'
+	echo "$timezone" > /tmp/TZ
+
+	if [ -x /sbin/syslogd ]; then
+		local log_ip log_size log_port log_type log_file
+		config_get log_ip "$cfg" log_ip 
+		config_get log_size "$cfg" log_size 16
+		config_get log_port "$cfg" log_port 514
+		config_get log_type "$cfg" log_type circular
+		config_get log_file "$cfg" log_file "/var/log/messages"
+		if [ "$log_type" = "file" ]; then
+			syslogd -s $log_size -O $log_file ${log_ip:+-L -R ${log_ip}:${log_port}} -S
+		else
+			syslogd -C${log_size} ${log_ip:+-L -R ${log_ip}:${log_port}}
+		fi
+	fi
+  ### ctc ###
+  if [ `/bin/grep -c -i log /proc/cmdline` -le 0 ] ; then
+  ###########
+	config_get klogconloglevel "$cfg" klogconloglevel
+	[ -x /sbin/klogd ] && klogd ${klogconloglevel:+-c $klogconloglevel}
+  ### ctc ###
+  fi
+  ###########
+}
+
+apply_uci_config() {
+	sh -c '. /etc/functions.sh; include /lib/config; uci_apply_defaults'
+}
+
+start() {
+	[ -f /proc/mounts ] || /sbin/mount_root
+	[ -f /proc/jffs2_bbc ] && echo "S" > /proc/jffs2_bbc
+	[ -f /proc/net/vlan/config ] && vconfig set_name_type DEV_PLUS_VID_NO_PAD
+
+	apply_uci_config
+	config_load system
+	config_foreach system_config system
+	
+	mkdir -p /var/run
+	mkdir -p /var/log
+	mkdir -p /var/lock
+	mkdir -p /var/state
+	mkdir -p /tmp/.uci
+	chmod 0700 /tmp/.uci
+	touch /var/log/wtmp
+	touch /var/log/lastlog
+	touch /tmp/resolv.conf.auto
+	ln -sf /tmp/resolv.conf.auto /tmp/resolv.conf
+	grep -q debugfs /proc/filesystems && mount -t debugfs debugfs /sys/kernel/debug
+	[ "$FAILSAFE" = "true" ] && touch /tmp/.failsafe
+
+	killall -q hotplug2
+	[ -x /sbin/hotplug2 ] && /sbin/hotplug2 --override --persistent \
+			--set-worker /lib/hotplug2/worker_fork.so \
+			--set-rules-file /etc/hotplug2.rules \
+			--max-children 1 >/dev/null 2>&1 &
+
+	# the coldplugging of network interfaces needs to happen later, so we do it manually here
+	for iface in $(awk -F: '/:/ {print $1}' /proc/net/dev); do
+		/usr/bin/env -i ACTION=add INTERFACE="$iface" /sbin/hotplug-call net
+	done
+
+	# create /dev/root if it doesn't exist
+	[ -e /dev/root ] || {
+		rootdev=$(awk 'BEGIN { RS=" "; FS="="; } $1 == "root" { print $2 }' < /proc/cmdline)
+		[ -n "$rootdev" ] && ln -s "$rootdev" /dev/root
+	}
+
+	######## ctc #########
+	ROOTFSMTD=`/usr/sbin/uboot_env --get --name rootfsmtd 2>&-`
+	if [ -n "$ROOTFSMTD" ] ; then
+		/bin/mount -w -o sync,noatime,nodiratim,norelatime,nodev,remount "$ROOTFSMTD" /
+	fi
+	######################
+
+	######## ctc #########
+	if [ -e /etc/init.d/boot.ifx ] ; then
+		/etc/init.d/boot.ifx
+	fi
+
+	if [ -e /etc/device_table.txt ] ; then
+		makedevs -d /etc/device_table.txt /
+	fi
+
+	/sbin/depmod &
+	######################
+
+	load_modules /etc/modules.d/*
+
+	######## ctc #########
+	mkdir /tmp/usb
+	mkdir /tmp/tr69
+
+	chown -R root:root /etc/.
+
+	VER=`grep CONFIG_UBOOT_CONFIG_SW_VERSION /etc/config.sh | cut -d '=' -f 2 | cut -d '"' -f 2`
+	if [ -n "$VER" ] ; then
+		if [ "$VER" != "`uboot_env --get --name sw_version`" ] ; then
+			uboot_env --set --name sw_version --value $VER
+		fi
+	fi
+
+	if [ "`grep -c CONFIG_FW_XDSL_VDSL_SUPPORT /etc/config.sh`" -le 0 ] ; then
+		WAN_TYPE=`umngcli get wan_type@system`
+		if [ -z "$WAN_TYPE" ] || [ "$WAN_TYPE" == "0" ] || [ "$WAN_TYPE" == "3" ] ; then
+			umngcli set wan_type@system=1
+		fi
+	fi
+	AUTO_SENSE=`umngcli get detect_wan@system`
+	if [ -z "$AUTO_SENSE" ] || [ "$AUTO_SENSE" == "1" ] ; then
+	      PROD_CODE=`umngcli get product_class@system`
+	      SER_NO=`uboot_env --get --name serial`
+				TMP_PPP_USERNAME=$DefPrefixUsername"-"$PROD_CODE"-"$SER_NO
+				PPP_USERNAME=`umngcli get username@wan000`
+				PPP_PASSWORD=`umngcli get password@wan000`				
+				if [ -z "$PPP_USERNAME" ] ; then
+			       umngcli set username@wan000=$TMP_PPP_USERNAME				    
+				fi
+				if [ -z "$PPP_PASSWORD" ] ; then			
+			       umngcli set password@wan000=$DefPassword				    
+				fi
+				PPP_USERNAME=`umngcli get username@wan050`
+				PPP_PASSWORD=`umngcli get password@wan050`				
+				if [ -z "$PPP_USERNAME" ] ; then
+			       umngcli set username@wan050=$TMP_PPP_USERNAME				    
+				fi
+				if [ -z "$PPP_PASSWORD" ] ; then
+			       umngcli set password@wan050=$DefPassword				    
+				fi
+				PPP_USERNAME=`umngcli get username@wan100`
+				PPP_PASSWORD=`umngcli get password@wan100`				
+				if [ -z "$PPP_USERNAME" ] ; then
+			       umngcli set username@wan100=$TMP_PPP_USERNAME				    
+				fi
+				if [ -z "$PPP_PASSWORD" ] ; then
+			       umngcli set password@wan100=$DefPassword				    
+				fi
+				ccfg_cli commitcfg																										
+	fi	
+	mkdir -p /tmp/fs
+	echo "!" > /tmp/fs/connect_disk
+	echo "!" > /tmp/fs/diskinfo
+	echo "!" > /tmp/fs/disklabel
+	echo "!" > /tmp/fs/drvstat
+	echo "!" > /tmp/fs/volinfo
+	echo "!" > /tmp/fs/sharefolderinfo
+	######################
+}
+
+stop() {
+        killall -9 syslogd 2> /dev/null
+}
+

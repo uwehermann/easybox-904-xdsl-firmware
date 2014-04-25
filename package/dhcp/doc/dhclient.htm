@@ -1,0 +1,349 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>dhclient(8) - Linux man page</title>
+<!-- base href="http://linux.die.net/man/8/dhclient" -->
+<link rel="canonical" href="http://linux.die.net/man/8/dhclient">
+<link rel="stylesheet" type="text/css" href="dhclient_files/white.css">
+<link rel="shortcut icon" href="http://linux.die.net/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=800,maximum-scale=1.0">
+<meta name="description" content="The Internet Systems Consortium DHCP Client, dhclient, provides a means for configuring one or more network interfaces using the Dynamic Host Configuration ...">
+<script src="dhclient_files/ga.js" async="" type="text/javascript"></script><script type="text/javascript">
+<!--
+var _gaq = _gaq || [];_gaq.push(['_setAccount', 'UA-50820-6']);_gaq.push(['_trackPageview']);
+window.google_analytics_uacct = 'UA-50820-6';
+// -->
+</script>
+</head>
+
+<body alink="#000000" bgcolor="#ffffff" link="#660000" text="#333333" vlink="#660000">
+<div id="bg"><div id="content">
+
+<!-- google_ad_section_start -->
+<h1><span class="highlight">dhclient</span>(8) - Linux man page</h1>
+
+<h2>Name</h2>
+<span class="highlight">dhclient</span> - Dynamic Host Configuration Protocol Client
+<h2>Synopsis</h2>
+<div id="adright">
+<script type="text/javascript"><!--
+google_ad_client = "pub-5823754184406795";
+google_ad_slot = "5992934909";
+google_ad_width = 300;
+google_ad_height = 250;
+//-->
+</script>
+<script type="text/javascript" src="dhclient_files/show_ads.js">
+</script><ins style="display:inline-table;border:none;height:250px;margin:0;padding:0;position:relative;visibility:visible;width:300px"><ins id="aswift_0_anchor" style="display:block;border:none;height:250px;margin:0;padding:0;position:relative;visibility:visible;width:300px"><iframe allowtransparency="true" hspace="0" marginwidth="0" marginheight="0" onload="var i=this.id,s=window.google_iframe_oncopy,H=s&amp;&amp;s.handlers,h=H&amp;&amp;H[i],w=this.contentWindow,d;try{d=w.document}catch(e){}if(h&amp;&amp;d&amp;&amp;(!d.body||!d.body.firstChild)){if(h.call){i+='.call';setTimeout(h,0)}else if(h.match){i+='.nav';w.location.replace(h)}s.log&amp;&amp;s.log.push(i)}" vspace="0" id="aswift_0" name="aswift_0" style="left:0;position:absolute;top:0;" frameborder="0" height="250" scrolling="no" width="300"></iframe></ins></ins>
+</div>
+
+<b><span class="highlight">dhclient</span></b> [ <b>-4</b> | <b>-6</b> ] [ <b>-S</b> ] [ <b>-N</b> [ <b>-N...</b> ] ] [ <b>-T</b>
+[ <b>-T...</b> ] ] [ <b>-P</b> [ <b>-P...</b> ] ] [ <b>-p</b> <i>port</i> ] [ <b>-d</b> ] [ <b>-e</b> <i>VAR=value</i> ] [ <b>-q</b> ] [ <b>-1</b> ] [
+<b>-r</b> | <b>-x</b> ] [ <b>-lf</b> <i>lease-file</i> ] [ <b>-pf</b> <i>pid-file</i> ] [ <b>-cf</b> <i>config-file</i> ] [ <b>-sf</b> <i>script-file</i> ] [
+<b>-s</b> server ] [ <b>-g</b> relay ] [ <b>-n</b> ] [ <b>-nc</b> ] [ <b>-nw</b> ] [ <b>-w</b> ] [ <b>-B</b> ] [ <b>-I</b> <i>dhcp-client-identifier</i> ] [
+<b>-H</b> <i>host-name</i> ] [ <b>-F</b> <i>fqdn.fqdn</i> ] [ <b>-V</b> <i>vendor-class-identifier</i> ] [ <b>-R</b> <i>request-option-list</i> ] [
+<b>-timeout</b> <i>timeout</i> ] [ <b>-v</b> ] [ <b>--version</b> ] [ <i>if0</i> [ <i>...ifN</i> ] ]
+<h2>Description</h2>
+The Internet Systems Consortium DHCP Client, <span class="highlight">dhclient</span>,
+ provides a means for configuring one or
+more network interfaces using the Dynamic Host Configuration Protocol, 
+BOOTP protocol, or if these protocols fail, by statically assigning an 
+address.
+<h2>Operation</h2>
+<p>The DHCP protocol allows a host to contact a central server which 
+maintains a list of IP addresses which may be assigned on one or more 
+subnets. A DHCP
+client may request an address from this pool, and then use it on a 
+temporary basis for communication on network. The DHCP protocol also 
+provides a mechanism
+whereby a client can learn important details about the network to which 
+it is attached, such as the location of a default router, the location 
+of a name
+server, and so on.
+</p><p>On startup, <span class="highlight">dhclient</span> reads the <i><span class="highlight">dhclient</span>.conf</i> for configuration instructions. It then gets a list of all the network interfaces that are configured in
+the current system. For each interface, it attempts to configure the interface using the DHCP protocol.
+</p><p>In order to keep track of leases across system reboots and server restarts, <span class="highlight">dhclient</span> keeps a list of leases it has been assigned in the
+<i><b><a href="http://linux.die.net/man/5/dhclient.leases"><span class="highlight">dhclient</span>.leases</a></b>(5)</i> file. On startup, after reading the <span class="highlight">dhclient</span>.conf file, <span class="highlight">dhclient</span> reads the <span class="highlight">dhclient</span>.leases file to refresh its memory about what
+leases it has been assigned.
+</p><p>When a new lease is acquired, it is appended to the end of the <span class="highlight">dhclient</span>.leases file. In order to prevent the file from becoming arbitrarily large, from time
+to time <span class="highlight">dhclient</span> creates a new <span class="highlight">dhclient</span>.leases file from its in-core lease database. The old version of the <span class="highlight">dhclient</span>.leases file is retained under the name
+<i><span class="highlight">dhclient</span>.leases~</i> until the next time <span class="highlight">dhclient</span> rewrites the database.
+</p><p>Old leases are kept around in case the DHCP server is unavailable when <span class="highlight">dhclient</span> is first invoked (generally during the initial system boot process). In that
+event, old leases from the <span class="highlight">dhclient</span>.leases file which have not yet expired are tested, and if they are determined to be valid, they are used until either they
+expire or the DHCP server becomes available.
+</p><p>A mobile host which may sometimes need to access a network on 
+which no DHCP server exists may be preloaded with a lease for a fixed 
+address on that network.
+When all attempts to contact a DHCP server have failed, <span class="highlight">dhclient</span> will try to validate the static lease, and if it succeeds, will use that lease until it is
+restarted.
+</p><p>A mobile host may also travel to some networks on which DHCP is 
+not available but BOOTP is. In that case, it may be advantageous to 
+arrange with the network
+administrator for an entry on the BOOTP database, so that the host can 
+boot quickly on that network rather than cycling through the list of old
+ leases.
+</p><h2>Command Line</h2>
+<p>The names of the network interfaces that <span class="highlight">dhclient</span> should attempt to configure may be specified on the command line. If no interface names are specified on
+the command line <span class="highlight">dhclient</span> will normally identify all network interfaces, eliminating non-broadcast interfaces if possible, and attempt to configure each
+interface.
+</p><p>It is also possible to specify interfaces by name in the <i><b><b><a href="http://linux.die.net/man/5/dhclient.conf"><span class="highlight">dhclient</span>.conf</a></b>(5)</b></i>
+ file. If interfaces are specified in this way, then the client will
+only configure interfaces that are either specified in the configuration
+ file or on the command line, and will ignore all other interfaces.
+</p><h2>Options</h2>
+<dl compact="compact">
+<dt><b>-4</b>
+</dt><dd>Use the DHCPv4 protocol to obtain an IPv4 address and configuration parameters (default).
+</dd><dt><b>-6</b>
+</dt><dd>Use the DHCPv6 protocol to obtain whatever IPv6 addresses are 
+available along with configuration parameters. The functionality of 
+DHCPv6 mode may be
+modified with the <b>-S</b> , <b>-T</b> , and <b>-N</b> options.
+</dd><dt><b>-S</b>
+</dt><dd>Perform an information-only request over DHCPv6 to get 
+stateless configuration parameters. It is not recommended to combine 
+this option with the <b>-N</b>
+, <b>-P</b> , or <b>-T</b> options or to share lease files between different modes of operation. Only valid with the <b>-6</b> option.
+</dd><dt><b>-N</b>
+</dt><dd>Perform a normal (IA_NA) address query over DHCPv6. It is not recommended to combine this option with the <b>-P</b> , <b>-S</b> , or <b>-T</b> options or
+to share lease files between different modes of operation. Only valid with the <b>-6</b> option.
+</dd><dt><b>-T</b>
+</dt><dd>Perform a temporary (IA_TA) address query over DHCPv6 (disables
+ normal address query). It is not recommended to combine this option 
+with the <b>-N</b> ,
+<b>-P</b> , or <b>-S</b> options or to share lease files between different modes of operation. Only valid with the <b>-6</b> option.
+</dd><dt><b>-P</b>
+</dt><dd>Enable IPv6 prefix delegation (disables normal address query). It is not not recommended to combine this option with the <b>-N</b> , <b>-S</b> , or
+<b>-T</b> options or to share lease files between different modes of operation. Only valid with the <b>-6</b> option.
+</dd><dt><b>-p &lt;port number&gt;</b>
+</dt><dd>The UDP port number the DHCP client should listen and transmit on. If unspecified, <b><span class="highlight">dhclient</span></b>
+ uses the default port 68. This option is mostly useful
+for debugging purposes. If a different port is specified for the client 
+to listen and transmit on, the client will also use a different 
+destination port - one
+less than the specified port.
+</dd><dt><b>-d</b>
+</dt><dd>Force <b><span class="highlight">dhclient</span></b> to run as a
+ foreground process. This is useful when running the client under a 
+debugger, or when running it out of inittab on System
+V systems.
+</dd><dt><b>-e VAR=value</b>
+</dt><dd>Define additional environment variables for the environment where <span class="highlight">dhclient</span>-script executes. You may specify multiplate <b>-e</b> options on the command
+line. For example: <b>-e IF_METRIC=1</b>
+</dd><dt><b>-q</b>
+</dt><dd>Suppress all terminal and log output except error messages.
+</dd><dt><b>-1</b>
+</dt><dd>Try once to get a lease. One failure, exit with code 2.
+</dd><dt><b>-r</b>
+</dt><dd>Tell <b><span class="highlight">dhclient</span></b> to release 
+the current lease it has from the server. This is not required by the 
+DHCP protocol, but some ISPs require their clients to
+notify the server if they wish to release an assigned IP address.
+</dd><dt><b>-lf &lt;lease-file&gt;</b>
+</dt><dd>Path to the lease database file. If unspecified, the default <b>/var/lib/<span class="highlight">dhclient</span>/<span class="highlight">dhclient</span>.leases</b> is used.
+</dd><dt><b>-pf &lt;pid-file&gt;</b>
+</dt><dd>Path to the process ID file. If unspecified, the default <b>/var/run/<span class="highlight">dhclient</span>.pid</b> is used.
+</dd><dt><b>-cf &lt;config-file&gt;</b>
+</dt><dd>Path to the client configuration file. If unspecified, the default <b>/etc/dhcp/<span class="highlight">dhclient</span>.conf</b> is used.
+</dd><dt><b>-sf &lt;script-file&gt;</b>
+</dt><dd>Path to the network configuration script invoked by <b><span class="highlight">dhclient</span></b> when it gets a lease. If unspecified, the default <b>/sbin/<span class="highlight">dhclient</span>-script</b> is used.
+</dd><dt><b>-s &lt;server&gt;</b>
+</dt><dd>Specifiy the server IP address or fully qualified domain name to transmit DHCP protocol messages to. Normally, <b><span class="highlight">dhclient</span></b> transmits these messages to
+255.255.255.255 (the IP limited broadcast address). Overriding this is mostly useful for debugging purposes.
+</dd><dt><b>-g &lt;relay&gt;</b>
+</dt><dd>Only for debugging. Set the giaddr field of all packets the 
+client sends to the IP address specified. This should not be expected to
+ work in any consistent
+or useful way.
+</dd><dt><b>-n</b>
+</dt><dd>Do not configure any interfaces. Most useful combined with the <b>-w</b> option.
+</dd><dt><b>-nc</b>
+</dt><dd>Do not drop capabilities.
+<p>Normally, if <b><span class="highlight">dhclient</span></b> was compiled with libcap-ng support, <b><span class="highlight">dhclient</span></b> drops most capabilities immediately upon startup. While more secure, this
+greatly restricts the additional actions that hooks in <i><b><span class="highlight">dhclient</span>-script (8)</b></i> can take. (For example, any daemons that <i><b><span class="highlight">dhclient</span>-script
+(8)</b></i> starts or restarts will inherit the restricted capabilities 
+as well, which may interfere with their correct operation.) Thus, the <b>-nc</b> option
+can be used to prevent <b><span class="highlight">dhclient</span></b> from dropping capabilities.
+</p><p>The <b>-nc</b> option is ignored if <b><span class="highlight">dhclient</span></b> was not compiled with libcap-ng support.
+</p></dd><dt><b>-nw</b>
+</dt><dd>Become a daemon process immediately (nowait) rather than waiting until an IP address has been acquired.
+</dd><dt><b>-w</b>
+</dt><dd>Keep running even if no network interfaces are found. The <b>omshell</b> program can be used to notify the client when a network interface has been added
+or removed so it can attempt to configure an IP address on that interface.
+</dd><dt><b>-B</b>
+</dt><dd>Set the BOOTP broadcast flag in request packets so servers will always broadcast replies.
+</dd><dt><b>-I &lt;dhcp-client-identifier&gt;</b>
+</dt><dd>Specify the dhcp-client-identifier option to send to the DHCP server.
+</dd><dt><b>-H &lt;host-name&gt;</b>
+</dt><dd>Specify the host-name option to send to the DHCP server. The 
+host-name string only contains the client's hostname prefix, to which 
+the server will append
+the ddns-domainname or domain-name options, if any, to derive the fully 
+qualified domain name of the client. The <b>-H</b> option cannot be used with the
+<b>-F</b> option.
+</dd><dt><b>-F &lt;fqdn.fqdn&gt;</b>
+</dt><dd>Specify the fqdn.fqdn option to send to the DHCP server. This option cannot be used with the <b>-H</b> option. The fqdn.fqdn option must specify the
+complete domain name of the client host, which the server may use for dynamic DNS updates.
+</dd><dt><b>-V &lt;vendor-class-identifier&gt;</b>
+</dt><dd>Specify the vendor-class-identifier option to send to the DHCP server.
+</dd><dt><b>-R &lt;option&gt;[,&lt;option&gt;...]</b>
+</dt><dd>Specify the list of options the client is to request from the 
+server. The option list must be a single string consisting of option 
+names separated by at
+least one command and optional space characters. The default option list
+ is:
+<p>subnet-mask, broadcast-address, time-offset, routers,<br>
+domain-name, domain-name-servers, host-name,<br>
+nis-domain, nis-servers, ntp-servers, interface-mtu</p><p>The <b>-R</b> 
+option does not append options to the default request, it overrides the 
+default request list. Keep this in mind if you want to request an
+additional option besides the default request list. You will have to 
+specify all option names for the <b>-R</b> parameter.
+</p></dd><dt><b>-timeout &lt;timeout&gt;</b>
+</dt><dd>Specify the time after which <b><span class="highlight">dhclient</span></b> will decide that no DHCP servers can be contacted when no responses have been received.
+</dd><dt><b>-v</b>
+</dt><dd>Enable verbose log messages.</dd></dl>
+<p>If the client is killed by a signale (for example at shutdown or reboot), it will not execute the <i><b><span class="highlight">dhclient</span>-script (8)</b></i> at exit. However, if you
+shut the client down gracefully with <b>-r</b> or <b>-x</b> it will execute <i><b><span class="highlight">dhclient</span>-script (8)</b></i> at shutdown with the specific reason for calling
+the script set in the environment table.
+</p><h2>Configuration</h2>
+The syntax of the <i><b><a href="http://linux.die.net/man/5/dhclient.conf" rel="nofollow"><span class="highlight">dhclient</span>.conf</a></b>(5)</i> file is discussed separately.
+<h2>Omapi</h2>
+The DHCP client provides some ability to control it while it is running,
+ without stopping it. This
+capability is provided using OMAPI, an API for manipulating remote 
+objects. OMAPI clients connect to the client using TCP/IP, authenticate,
+ and can then
+examine the client's current status and make changes to it.
+<p>Rather than implementing the underlying OMAPI protocol directly, user
+ programs should use the dhcpctl API or OMAPI itself. Dhcpctl is a 
+wrapper that handles
+some of the housekeeping chores that OMAPI does not do automatically. 
+Dhcpctl and OMAPI are documented in <i><b><b><a href="http://linux.die.net/man/3/dhcpctl">dhcpctl</a></b>(3)</b></i> and <i><b><b><a href="http://linux.die.net/man/3/omapi">omapi</a></b>(3)</b></i>.
+Most things you'd want to do with the client can be done directly using the <i><b><b><a href="http://linux.die.net/man/1/omshell">omshell</a></b>(1)</b></i> command, rather than having to write a special program.
+</p><h2>the Control Object</h2>
+The control object allows you to shut the client down, releasing all 
+leases that it
+holds and deleting any DNS records it may have added. It also allows you
+ to pause the client - this unconfigures any interfaces the client is 
+using. You can
+then restart it, which causes it to reconfigure those interfaces. You 
+would normally pause the client prior to going into hibernation or sleep
+ on a laptop
+computer. You would then resume it after the power comes back. This 
+allows PC cards to be shut down while the computer is hibernating or 
+sleeping, and then
+reinitialized to their previous state once the computer comes out of 
+hibernation or sleep.
+<p>The control object has one attribute - the state attribute. To shut 
+the client down, set its state attribute to 2. It will automatically do a
+ DHCPRELEASE.
+To pause it, set its state attribute to 3. To resume it, set its state 
+attribute to 4.
+</p><h2>Files</h2>
+<b>/sbin/<span class="highlight">dhclient</span>-script, /etc/dhcp/<span class="highlight">dhclient</span>.conf, /var/lib/<span class="highlight">dhclient</span>/<span class="highlight">dhclient</span>.leases,
+/var/run/<span class="highlight">dhclient</span>.pid, /var/lib/<span class="highlight">dhclient</span>/<span class="highlight">dhclient</span>.leases~.</b>
+<h2>See Also</h2>
+<i><b><a href="http://linux.die.net/man/8/dhcpd">dhcpd</a></b>(8)</i>, <i><b><a href="http://linux.die.net/man/8/dhcrelay">dhcrelay</a></b>(8)</i>, <i><b><a href="http://linux.die.net/man/8/dhclient-script"><span class="highlight">dhclient</span>-script</a></b>(8)</i>, <i><b><a href="http://linux.die.net/man/5/dhclient.conf" rel="nofollow"><span class="highlight">dhclient</span>.conf</a></b>(5)</i>,
+<i><b><a href="http://linux.die.net/man/5/dhclient.leases" rel="nofollow"><span class="highlight">dhclient</span>.leases</a></b>(5)</i>, <i><b><a href="http://linux.die.net/man/5/dhcp-eval">dhcp-eval</a></b>(5)</i>.
+<h2>Author</h2>
+<i><b><b><span class="highlight">dhclient</span></b>(8)</b></i> has been written for Internet Systems Consortium by Ted Lemon in
+cooperation with Vixie Enterprises. To learn more about Internet Systems Consortium, see <i><b><a href="https://www.isc.org/">https://www.isc.org</a></b></i> To learn more about Vixie
+Enterprises, see <i><b><a href="http://www.vix.com/">http://www.vix.com</a>.</b></i>
+<p>This client was substantially modified and enhanced by Elliot Poger 
+for use on Linux while he was working on the MosquitoNet project at 
+Stanford.
+</p><p>The current version owes much to Elliot's Linux enhancements, but
+ was substantially reorganized and partially rewritten by Ted Lemon so 
+as to use the same
+networking framework that the Internet Systems Consortium DHCP server 
+uses. Much system-specific configuration code was moved into a shell 
+script so that as
+support for more operating systems is added, it will not be necessary to
+ port and maintain system-specific configuration code to these operating
+ systems -
+instead, the shell script can invoke the native tools to accomplish the 
+same purpose.
+
+<!-- google_ad_section_end -->
+</p><h2>Referenced By</h2>
+<b><a href="http://linux.die.net/man/8/avahi-autoipd" rel="nofollow">avahi-autoipd</a></b>(8),
+<b><a href="http://linux.die.net/man/5/dhcp-options" rel="nofollow">dhcp-options</a></b>(5),
+<b><a href="http://linux.die.net/man/5/dhcpd-eval" rel="nofollow">dhcpd-eval</a></b>(5),
+<b><a href="http://linux.die.net/man/5/dhcpd-options" rel="nofollow">dhcpd-options</a></b>(5),
+<b><a href="http://linux.die.net/man/8/dhcping" rel="nofollow">dhcping</a></b>(8),
+<b><a href="http://linux.die.net/man/7/kpac_dhcp_helper" rel="nofollow">kpac_dhcp_helper</a></b>(7),
+<b><a href="http://linux.die.net/man/8/wicd" rel="nofollow">wicd</a></b>(8)
+<div id="adbottom">
+<script type="text/javascript"><!--
+google_ad_client = "pub-5823754184406795";
+google_ad_slot = "8789940313";
+google_ad_width = 336;
+google_ad_height = 280;
+//-->
+</script>
+<script type="text/javascript" src="dhclient_files/show_ads.js">
+</script><ins style="display:inline-table;border:none;height:280px;margin:0;padding:0;position:relative;visibility:visible;width:336px"><ins id="aswift_1_anchor" style="display:block;border:none;height:280px;margin:0;padding:0;position:relative;visibility:visible;width:336px"><iframe allowtransparency="true" hspace="0" marginwidth="0" marginheight="0" onload="var i=this.id,s=window.google_iframe_oncopy,H=s&amp;&amp;s.handlers,h=H&amp;&amp;H[i],w=this.contentWindow,d;try{d=w.document}catch(e){}if(h&amp;&amp;d&amp;&amp;(!d.body||!d.body.firstChild)){if(h.call){i+='.call';setTimeout(h,0)}else if(h.match){i+='.nav';w.location.replace(h)}s.log&amp;&amp;s.log.push(i)}" vspace="0" id="aswift_1" name="aswift_1" style="left:0;position:absolute;top:0;" frameborder="0" height="280" scrolling="no" width="336"></iframe></ins></ins>
+</div>
+
+</div>
+<div id="menu">
+<a href="http://www.die.net/"><img src="dhclient_files/logo.png" alt="die.net" border="0" height="121" width="119"></a>
+
+
+<dl><dd>
+<form id="cse-search-box-menu" action="http://www.die.net/search/">
+<label><a href="http://www.die.net/search/">site search</a></label>
+<input name="q" size="10" type="text">
+<span style="font-family:Arial, Helvetica, sans-serif; font-size:75%">Google Custom Search</span>
+<input name="sa" value="Search" type="hidden">
+<input name="ie" value="ISO-8859-1" type="hidden">
+<input name="cx" value="partner-pub-5823754184406795:54htp1rtx5u" type="hidden">
+<input name="cof" value="FORID:9" type="hidden">
+</form>
+<script type="text/javascript">
+<!--
+document.forms["cse-search-box-menu"].action = "http://www.die.net/search/";
+// -->
+</script>
+</dd></dl>
+
+
+
+
+<dl>
+<dt>Library</dt>
+<dd><a href="http://linux.die.net/">linux docs</a></dd>
+<dd><a href="http://linux.die.net/man/">linux man pages</a></dd>
+<dd><a href="http://dictionary.die.net/">online dictionary</a></dd>
+<dd><a href="http://www.die.net/musings/page_load_time/">page load time</a></dd>
+</dl>
+<dl>
+<dt>Toys</dt>
+<dd><a href="http://www.die.net/earth/">world sunlight</a></dd>
+<dd><a href="http://www.die.net/moon/">moon phase</a></dd>
+<dd><a href="http://trace.die.net/">trace explorer</a></dd>
+</dl>
+
+
+<dl>
+<dt><a href="http://linux.die.net/man/8/"><img src="dhclient_files/back.gif" alt="Back" border="0" height="22" width="20"></a></dt>
+</dl>
+
+</div></div>
+<script type="text/javascript">
+<!--
+if (top.location != self.location) top.location = self.location;
+if (/[?&][pq]=/.test(document.referrer)) document.write(unescape("%3Cscript src='/style/highlight.js' type='text/javascript'%3E%3C/script%3E"));
+function googleTranslateElementInit() {new google.translate.TranslateElement({pageLanguage: 'en', floatPosition: google.translate.TranslateElement.FloatPosition.TOP_RIGHT, gaTrack: true, gaId: 'UA-50820-6'});}
+if (!/^en/i.test(window.navigator.userLanguage||window.navigator.language)) document.write(unescape("%3Cscript src='//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit' type='text/javascript'%3E%3C/script%3E"));
+(function() {
+var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
+// -->
+</script><script src="dhclient_files/highlight.js" type="text/javascript"></script>
+
+
+</body></html>

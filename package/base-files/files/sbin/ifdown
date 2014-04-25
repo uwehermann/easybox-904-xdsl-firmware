@@ -1,0 +1,119 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+. /etc/functions.sh
+[ $# = 0 ] && { echo "  $0 <group>"; exit; }
+[ "x$1" = "x-a" ] && {
+	[ -e "/tmp/resolv.conf.auto" ] && rm /tmp/resolv.conf.auto
+	config_cb() {
+		[ interface != "$1" -o -z "$2" ] || eval "$0 $2"
+	}
+	config_load network
+	exit
+}
+
+### ctc ###
+if [ -z "$CONFIG_SECTION" ] ; then
+	CONFIG_SECTION=$1
+fi
+###########
+
+include /lib/network
+scan_interfaces
+
+cfg=$1
+debug "### ifdown $cfg ###"
+
+config_get proto "$cfg" proto
+[ -z "$proto" ] && { echo "interface not found."; exit; }
+
+config_get iface "$cfg" device
+config_get ifname "$cfg" ifname
+config_get device "$cfg" device
+if [ -z "$ifname" ] ; then
+	ifname=`umngcli get ifname@${cfg}`
+fi
+#note: must get ip6_forwarding before the interface, esp PPP, is down
+#ip6_forwarding=`sysctl -n net.ipv6.conf.${ifname}.forwarding`
+
+[ "static" = "$proto" -o "none" = "$proto" ] && {
+	env -i ACTION="ifdown" INTERFACE="$cfg" DEVICE="$iface" PROTO="$proto" /sbin/hotplug-call "iface"
+}
+
+# call interface stop handler
+( type "stop_interface_$proto" ) >/dev/null 2>/dev/null && eval "stop_interface_$proto '$cfg'"
+
+### ctc ###
+CNT=0
+PPP_PID=`pgrep -l -f pppd | grep "nic-$iface" | cut -d ' ' -f 1`
+while [ -n "$PPP_PID" ] ; do
+	if [ "$CNT" -ge 50 ] ; then
+		for PID in $PPP_PID ; do
+			kill -9 $PID
+		done
+		break
+	else
+		for PID in $PPP_PID ; do
+			kill $PID
+		done
+	fi
+	#
+	usleep 100000 # 0.1 sec
+	PPP_PID=`pgrep -l -f pppd | grep "nic-$iface" | cut -d ' ' -f 1`
+	#
+	let CNT=$CNT+1
+done
+
+DHCP_PID=`pgrep -l -f udhcpc | grep "\-i $iface" | cut -d ' ' -f 1`
+while [ -n "$DHCP_PID" ] ; do
+	for PID in $DHCP_PID ; do
+		kill $PID
+	done
+	usleep 100000 # 0.1 sec
+    DHCP_PID=`pgrep -l -f udhcpc | grep "\-i $iface" | cut -d ' ' -f 1`
+done
+###########
+
+[ ."$device" != ."$ifname" ] || device=
+for dev in $ifname $device; do
+	ifconfig "$dev" 0.0.0.0 down >/dev/null 2>/dev/null
+	## bitonic update, ctc added
+	. /usr/sbin/arc-ipv4-linkdown.sh $cfg
+	## end of bitonic update
+
+#	### ygchen add ###
+#	if [ "$ip6_forwarding" == "2" ]; then
+#	    . /usr/sbin/arc-ipv6-linkdown.sh $cfg $dev
+#	fi
+#	##################
+done
+
+glb_ip6_enable=`ccfg_cli get ip6_enable@system`
+if [ "$glb_ip6_enable" == "1" ]; then
+	ip6_enable=`umngcli get ip6_enable@${cfg}`
+	if [ "$ip6_enable" == "1" ] ; then
+		ip6_proto=`umngcli get ip6_proto@${cfg}`
+		if [ "$ip6_proto" == "dhcp" ] ; then
+			echo "[ifdown] dhcp6c_release $cfg" >> /tmp/ipv6.log
+			/usr/sbin/dhcp6c_release
+		fi
+	fi
+fi
+
+config_get iftype "$cfg" type
+[ "bridge" = "$iftype" ] && brctl delbr "$ifname" >/dev/null 2>/dev/null
+
+### ctc ###
+## remove the interface's dns entries
+#remove_dns "$cfg"
+resolv_update.sh $ifname
+###########
+
+# remove the interface's network state
+uci_revert_state network "$1"
+
+# revert aliases state as well
+config_get aliases "$1" aliases
+for config in $aliases; do
+	uci_revert_state network "$config"
+done

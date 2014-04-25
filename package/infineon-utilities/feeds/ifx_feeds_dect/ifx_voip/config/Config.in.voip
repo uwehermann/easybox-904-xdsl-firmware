@@ -1,0 +1,18 @@
+config IFX_VOIP_FAX
+	bool "FAX support"
+	default y
+	help
+	 Option to enable FAX support.
+config IFX_VOIP_FXO
+	bool "FXO support"
+		#select PACKAGE_teridian-voice-daa-ter1x66
+		depends !IFX_DECT_SS_FEATURE_USIF_SPI
+	default n
+	help
+	 Option to enable FXO support.
+config IFX_DECT_SUPPORT
+	bool "DECT support"
+	#depends on CONFIG_TARGET_ifxcpe_platform_ar9
+	default y
+	help
+	 Option to enable DECT support.

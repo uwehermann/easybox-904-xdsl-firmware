@@ -1,0 +1,207 @@
+# This file is interpreted as shell script.
+# Put your custom iptables rules here, they will
+# be executed with each firewall (re-)start.
+
+# default firewall rules for ipv6
+
+. /usr/sbin/iptables_utility.sh
+IPT="ip6tables"
+PPA_FILTER_PROC=/proc/ppa/api/filter
+
+#get wan interface information
+. /etc/functions.sh
+wanifs=`cat /etc/config/network | grep wan | cut -d" " -f3`
+config_load network
+ipt_lock_res
+
+#Chain create
+($IPT -F TR69_RULES >/dev/null 2>&1) || $IPT -N TR69_RULES
+
+########SPI###########
+($IPT -F SPI_RULES >/dev/null 2>&1) || $IPT -N SPI_RULES
+# NMAP FIN/URG/PSH
+#$IPT -A SPI_RULES -p tcp --tcp-flags ALL FIN,URG,PSH -m recent --set --name NMAP_FIN_URG_PSH
+#$IPT -A SPI_RULES -p tcp --tcp-flags ALL FIN,URG,PSH -m recent --update --name NMAP_FIN_URG_PSH --seconds 1 --hitcount 10 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[NMAP Xmas] : '
+#$IPT -A SPI_RULES -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
+#SmurfAttack.cap
+($IPT -F SPI_RULES_ICMP_SMURF >/dev/null 2>&1) || $IPT -N SPI_RULES_ICMP_SMURF
+$IPT -A SPI_RULES_ICMP_SMURF -p icmpv6 --icmpv6-type echo-request -m pkttype --pkt-type broadcast -m recent --name SMURFATTACK --set
+$IPT -A SPI_RULES_ICMP_SMURF -p icmpv6 --icmpv6-type echo-request -m pkttype --pkt-type broadcast -m recent --update --name SMURFATTACK --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[SmurfAttack] : '
+$IPT -A SPI_RULES_ICMP_SMURF -p icmpv6 --icmpv6-type echo-request -m pkttype --pkt-type broadcast -j DROP
+#fragmentation Flood
+#$IPT -A SPI_RULES -f -m recent --name FRAG_FLOOD --set
+#$IPT -A SPI_RULES -m recent --update --name FRAG_FLOOD --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[fragFlood] : '
+#$IPT -A SPI_RULES -f -j DROP
+#TCP Null Scan Attack
+#$IPT -A SPI_RULES -p tcp --tcp-flags ALL NONE -m recent --name NULL_SCAN --set
+#$IPT -A SPI_RULES -m recent --update --name NULL_SCAN --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[NULL SCAN] : '
+#$IPT -A SPI_RULES -p tcp --tcp-flags ALL NONE -j DROP
+#TCP Xmas Scan Attack
+#$IPT -A SPI_RULES -p tcp --tcp-flags SYN,FIN SYN,FIN -m recent --name XMAS_SCAN --set
+#$IPT -A SPI_RULES -m recent --update --name XMAS_SCAN --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[TCPXmasScan] : '
+#$IPT -A SPI_RULES -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP
+#TCP FIN Scan Attack
+#$IPT -A SPI_RULES -p tcp --tcp-flags FIN,ACK FIN -m recent --name FIN_SCAN --set
+#$IPT -A SPI_RULES -m recent --update --name FIN_SCAN --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[TCPFINScan] : '
+#$IPT -A SPI_RULES -p tcp --tcp-flags FIN,ACK FIN -j DROP
+#ICMP Redirect Packet
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type redirect -j ULOG --ulog-nlgroup 1 --ulog-prefix '[ICMPRedirDROP] : '
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type redirect -j DROP
+#ICMP Netmask Request
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type address-mask-request -j ULOG --ulog-nlgroup 1 --ulog-prefix '[ICMP NetMReqDROP] : '
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type address-mask-request -j DROP
+#ICMP TimeStamp Request
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type timestamp-request -j ULOG --ulog-nlgroup 1 --ulog-prefix '[ICMP TimeReqDROP] : '
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type timestamp-request -j DROP
+#ICMP Advertisement
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type router-advertisement -j ULOG --ulog-nlgroup 1 --ulog-prefix '[ICMP AdvertDROP] : '
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type router-advertisement -j DROP
+# PingSweep.cap --> block ping request
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type echo-request -m recent --name pingreq --set
+#$IPT -A SPI_RULES -m recent --update --name pingreq --seconds 1 --hitcount 3 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[Ping] : '
+#$IPT -A SPI_RULES -m recent --update --name pingreq --seconds 1 --hitcount 3 -j DROP
+#Furtive port scanner
+#$IPT -A SPI_RULES -p tcp --tcp-flags SYN,ACK,FIN,RST RST -m limit --limit 1/s -j ACCEPT
+#PingOfDeath.cap(Ping of death)
+($IPT -F SPI_RULES_ICMP_PINGDEATH >/dev/null 2>&1) || $IPT -N SPI_RULES_ICMP_PINGDEATH
+$IPT -A SPI_RULES_ICMP_PINGDEATH -p icmpv6 --icmpv6-type echo-request -m length ! --length 1:65500 -m recent --name ICMPPINGDEATH --set
+$IPT -A SPI_RULES_ICMP_PINGDEATH -p icmpv6 --icmpv6-type echo-request -m length ! --length 1:65500 -m recent --update --name ICMPPINGDEATH --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[DoS PingDeath] : '
+$IPT -A SPI_RULES_ICMP_PINGDEATH -p icmpv6 --icmpv6-type echo-request -m length ! --length 1:65500 -j DROP
+#PingFlood.cap log ping from wan is block by default(Ping-flood)
+#$IPT -A SPI_RULES -p icmpv6 --icmpv6-type echo-request -m recent --name DOS_PINGF --set
+#$IPT -A SPI_RULES -m recent --update --name DOS_PINGF --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[DoS Ping] : '
+#$IPT -A SPI_RULES -m recent --update --name DOS_PINGF --seconds 1 --hitcount 20 -j DROP
+#Port scan protection
+($IPT -F SPI_RULES_TCP_PORTSCAN >/dev/null 2>&1) || $IPT -N SPI_RULES_TCP_PORTSCAN
+$IPT -A SPI_RULES_TCP_PORTSCAN -p tcp --tcp-flags ALL FIN,URG,PSH -j ULOG --ulog-nlgroup 1 --ulog-prefix '[Port scan] : '
+$IPT -A SPI_RULES_TCP_PORTSCAN -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
+$IPT -A SPI_RULES_TCP_PORTSCAN -p tcp --tcp-flags SYN,FIN SYN,FIN -j ULOG --ulog-nlgroup 1 --ulog-prefix '[Port scan] : '
+$IPT -A SPI_RULES_TCP_PORTSCAN -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP
+#Teardrop
+($IPT -F SPI_RULES_UDP_TEAR >/dev/null 2>&1) || $IPT -N SPI_RULES_UDP_TEAR
+$IPT -A SPI_RULES_UDP_TEAR -p UDP -f -m recent --name TEARDROP --set
+$IPT -A SPI_RULES_UDP_TEAR -p UDP -f -m recent --update --name TEARDROP --seconds 1 --hitcount 20 -j ULOG --ulog-nlgroup 1 --ulog-prefix '[Tear Drop] : '
+$IPT -A SPI_RULES_UDP_TEAR -p UDP -f -j DROP
+#TCP SYN with Data "empty"
+($IPT -F SPI_RULES_TCP_SYNDATA >/dev/null 2>&1) || $IPT -N SPI_RULES_TCP_SYNDATA
+#UDB Bomb "empty"
+($IPT -F SPI_RULES_UDB_BOMB >/dev/null 2>&1) || $IPT -N SPI_RULES_UDB_BOMB
+
+($IPT -F SPI_RULES_TCP_LAND >/dev/null 2>&1) || $IPT -N SPI_RULES_TCP_LAND
+($IPT -F SPI_RULES_IP_SPROOF >/dev/null 2>&1) || $IPT -N SPI_RULES_IP_SPROOF
+#####################PPA init############################
+#echo 'del-all' > ${PPA_FILTER_PROC}
+#echo 'add - - - - 6 - - - 80 - - - -' > ${PPA_FILTER_PROC}
+#echo 'add - - - - 6 - - - 3128 - - - -' > ${PPA_FILTER_PROC}
+#echo 'add - - - - 6 - - - 8000 - - - -' > ${PPA_FILTER_PROC}
+#echo 'add - - - - 6 - - - 8001 - - - -' > ${PPA_FILTER_PROC}
+#echo 'add - - - - 6 - - - 8080 - - - -' > ${PPA_FILTER_PROC}
+
+####################### Service on device ##########################
+($IPT -F SERVICES_RULES >/dev/null 2>&1) || $IPT -N SERVICES_RULES
+#($IPT -t nat -F SERVICES_NAT_RULES >/dev/null 2>&1) || $IPT -t nat -N SERVICES_NAT_RULES
+#($IPT -t nat -F TR69_NAT_RULES >/dev/null 2>&1) || $IPT -t nat -N TR69_NAT_RULES
+($IPT -F FW_FILTER_MAC >/dev/null 2>&1) || $IPT -N FW_FILTER_MAC
+($IPT -F FW_FILTER_ACCESS >/dev/null 2>&1) || $IPT -N FW_FILTER_ACCESS
+
+# 1. not find out yet which process keeps sending out UDP packets with dst port 80 to WAN, just block it temporarily
+# 2. Twonky hasn't fixed the issue to sending SSDP to WAN
+#WANIF=`wandataif.sh`
+#$IPT -I OUTPUT -o ${WANIF:0:3}+ -p udp --dport 80 -j DROP
+#$IPT -I OUTPUT -o ${WANIF:0:3}+ -d 239.255.255.250 -p udp --dport 1900 -j DROP
+#$IPT -I OUTPUT -o ${WANIF:0:3}+ -p udp --dport 137:138 -j DROP
+
+#if [ -e /etc/config/nat_v6.user ]; then
+#	. /etc/config/nat_v6.user
+#fi
+#For all service on device
+$IPT -I INPUT -j SERVICES_RULES
+if [ -e /etc/config/firewall2_v6.user ]; then
+	. /etc/config/firewall2_v6.user
+fi
+#if [ -e /etc/config/firewall_tr69_v6.user ]; then
+#	. /etc/config/firewall_tr69_v6.user
+#fi
+$IPT -I INPUT -i br-lan -j FW_FILTER_MAC
+
+for wanif in $wanifs; do
+	#echo "$wanif"
+	config_get realifname ${wanif} ifname
+	if [ -n "$realifname" ]; then
+		config_get proto ${wanif} proto
+		if [ "${proto:0:3}" = "ppp" ]; then
+			#realifname=${proto:0:3}`echo "$wanif" | sed -e "s/wan//" -e "s/^0*\([0-9]\)/\1/"`
+			realifname=`echo $wanif | sed -e "s/...\([0-9]\)/ppp\1/" -e "s/p0*\([0-9]\)/p\1/"`
+		fi
+		#access control
+		$IPT -I FORWARD -i br-lan -o $realifname -j FW_FILTER_ACCESS
+	fi
+done
+$IPT -I FORWARD -i br-lan -j FW_FILTER_MAC
+# HTTP Redirect
+#($IPT -t nat -N HTTPREDIR_NAT_RULES >/dev/null 2>&1)
+#$IPT -t nat -I PREROUTING -j HTTPREDIR_NAT_RULES
+#TR69
+#$IPT -I INPUT -j TR69_RULES
+#$IPT -A SERVICES_RULES -j TR69_RULES
+#$IPT -t nat -A SERVICES_NAT_RULES -j TR69_NAT_RULES
+
+# WebFTP
+#if [ -f /tmp/wftp/firewall_v6.wftp ] ; then
+#	. /tmp/wftp/firewall_v6.wftp
+#fi
+
+mkdir -p /tmp/firewallExt
+#execute scripts for external modules run once
+files=`find /tmp/firewallExt/ -name "V6M1_??_*.user"`
+for f in $files
+do
+	#if [ -x $f ];then
+	if [ -r $f ] && [ -f $f ];then
+		echo $f will be executed by firewall.user
+		. $f
+	else
+		echo $f execution fail by firewall.user
+	fi
+done
+
+#execute scripts for external modules
+files=`find /etc/config/firewallExt/ -name "V6M1_??_*.user"`
+for f in $files
+do
+	#if [ -x $f ];then
+	if [ -r $f ];then
+		echo $f will be executed by firewall.user
+		. $f
+	else
+		echo $f execution fail by firewall.user
+	fi
+done
+
+# WLAN ISOLATE
+#if [ -f /usr/sbin/firewall_wlan2.user ] ; then
+#	. /usr/sbin/firewall_wlan2.user
+#fi
+
+
+# reset ppa WAN sessions
+#ppa_lan_enb=`ppacmd status | grep -c "LAN.*enable"`
+#ppa_wan_enb=`ppacmd status | grep -c "WAN.*enable"`
+#ppacmd control --disable-lan --disable-wan
+#ppaifs=`ppacmd getwan | grep ] | cut -d ']' -f 2`
+#for ppaif in $ppaifs;
+#do
+#	ppacmd delwan -i $ppaif
+#	ppacmd addwan -i $ppaif
+#done
+#if [ "$ppa_lan_enb" == "1" -a "$ppa_wan_enb" == "1" ]; then
+#	ppacmd control --enable-lan --enable-wan
+#	/usr/sbin/qos/ppa_enable_w_swqos.sh
+#elif [ "$ppa_lan_enb" == "1" -a "$ppa_wan_enb" == "0" ]; then
+#	ppacmd control --enable-lan --disable-wan
+#elif [ "$ppa_lan_enb" == "0" -a "$ppa_wan_enb" == "1" ]; then
+#	ppacmd control --disable-lan --enable-wan
+#fi
+echo "`date` firewall_v6.user finished" > /dev/console
+
+ipt_unlock_res

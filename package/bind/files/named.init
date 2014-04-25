@@ -1,0 +1,233 @@
+#!/bin/sh /etc/rc.common
+START=70
+
+work_dir=/var/etc/bind
+config_file=$work_dir/named.conf
+resolve_file=/var/resolv.conf
+pid_file=/var/run/named.pid
+nsupdate_cmd=/usr/bin/nsupdate
+ULA=""
+LANv6longULA=""
+with_ULA=0
+GUA=""
+LANv6longGUA=""    
+with_GUA=0
+
+update_forwarders() {
+    if [ -f ${resolve_file}.auto ]; then
+        set -- $(awk 'BEGIN { ns=""; FS=" "; } /nameserver/ { if( $2 != "127.0.0.1" ) { ns=sprintf("%s %s;", ns, $2); } } END { print ns; }' ${resolve_file}.auto)
+        nss_dnsmasq=$@
+    fi
+    set -- $(awk 'BEGIN { ns=""; FS=" "; } /nameserver/ { if( $2 != "127.0.0.1" ) { ns=sprintf("%s %s;", ns, $2); } } END { print ns; }' $resolve_file)
+    nss=$@
+    
+    #if [ -n nss ]; then
+        NEW_FWDERS_SECTION="\tforwarders{ $nss_dnsmasq $nss };"
+        echo $NEW_FWDERS_SECTION
+        #get the first forwarders{} block (need to make sure there's a forwarders block in named.conf)
+        set -- $(eval "awk 'BEGIN { LB=0 } /^[[:blank:]]*forwarders/ { LB=NR } /};/ { if( LB!=0 ) { LE=NR; print LB, LE; exit; } }' $config_file")
+        fwders_LB=$1
+        fwders_LE=$2
+        echo "forwarders block begin=$fwders_LB, end=$fwders_LE"
+
+        # remove forwarders block
+        eval "sed -e '$fwders_LB,$fwders_LE d' $config_file > ${config_file}.tmp"
+        # insert forwarders block
+        eval "sed -e '$fwders_LB i\#tag-to-ins' $config_file.tmp | sed 's/^#tag-to-ins/$NEW_FWDERS_SECTION/g' > $config_file"
+        rm ${config_file}.tmp
+    #fi
+}
+    
+prepare_named_conf() {
+
+    update_forwarders
+    
+    #get lan ipv4 addr
+    LANif=br-lan
+    LANv4addr=`ifconfig $LANif | grep 'inet addr' | awk '{print $2}' | cut -d':' -f2`
+    LANv4subnet_arpa=`echo $LANv4addr | awk -F. '{printf("%d.%d.%d", $3,$2,$1)}'`
+    echo "LANv4subnet_arpa=$LANv4subnet_arpa"
+
+    #insert a reverse mapping zone for lan ipv4 subnet in name.conf
+    printf '\nzone "%s.in-addr.arpa" {\n\ttype master;\n\tfile "db.lan_ip4.arpa";\n\tallow-update { any; };\n};\n' $LANv4subnet_arpa >> $config_file
+    
+    #try to get ipv6 ULA
+    ULA=`ifconfig $LANif | grep ' f[cd].*Global' | awk '{print $3}'`
+    with_ULA=0
+    if [ -n "$ULA" ]; then
+        with_ULA=1
+        LANv6longULA=`grep "f[cd].*$LANif" /proc/net/if_inet6 | cut -c1-32`
+        LANv6prefix_arpa=`echo ${LANv6longULA:15:1}`
+        i=15
+        while [ "$i" != "0" ]
+        do
+            i=$(($i-1))
+            LANv6prefix_arpa=`echo $LANv6prefix_arpa.${LANv6longULA:$i:1}`
+        done        
+        echo "LANv6prefix_arpa(ULA)=$LANv6prefix_arpa"
+        
+        #insert a reverse mapping zone for the ULA in name.conf
+        printf '\nzone "%s.ip6.arpa" {\n\ttype master;\n\tfile "db.lan_ip6ULA.arpa";\n\tallow-update { any; };\n};\n' $LANv6prefix_arpa >> $config_file
+    fi
+    
+    #try to get ipv6 GUA
+    GUA=`ifconfig $LANif | grep ' [23].*Global' | awk '{print $3}'`
+    with_GUA=0
+    if [ -n "$GUA" ]; then
+        with_GUA=1
+        LANv6longGUA=`grep "[23].*$LANif" /proc/net/if_inet6 | cut -c1-32`
+        LANv6prefix_arpa=`echo ${LANv6longGUA:15:1}`
+        i=15
+        while [ "$i" != "0" ]
+        do
+            i=$(($i-1))
+            LANv6prefix_arpa=`echo $LANv6prefix_arpa.${LANv6longGUA:$i:1}`
+        done        
+        echo "LANv6prefix_arpa(GUA)=$LANv6prefix_arpa"
+        
+        #insert a reverse mapping zone for the GUA in name.conf
+        printf '\nzone "%s.ip6.arpa" {\n\ttype master;\n\tfile "db.lan_ip6GUA.arpa";\n\tallow-update { any; };\n};\n' $LANv6prefix_arpa >> $config_file
+    fi
+}
+
+update_records() {
+    dns_name=`grep "SOA" $work_dir/db.lan_domain | awk '{print $4}'`
+    #remove the last '.'
+    dns_name=${dns_name%?}
+
+    #update A record
+    printf 'server 127.0.0.1\nupdate add %s 2147483647 IN A %s\nsend\n' $dns_name $LANv4addr > $work_dir/ns_update.content
+    cat $work_dir/ns_update.content
+    $nsupdate_cmd $work_dir/ns_update.content
+    
+    #update PTR record
+    LANv4addr_arpa=`echo $LANv4addr | awk -F. '{printf("%d.%d.%d.%d", $4,$3,$2,$1)}'`
+    echo "LANv4addr_arpa=$LANv4addr_arpa"
+    printf 'server 127.0.0.1\nupdate add %s.in-addr.arpa. 2147483647 IN PTR %s.\nsend\n' $LANv4addr_arpa $dns_name > $work_dir/ns_update.content
+    cat $work_dir/ns_update.content
+    $nsupdate_cmd $work_dir/ns_update.content
+            
+    if [ "$with_ULA" == "1" ]; then
+        #update ip6 ULA AAAA record
+        LANv6addr=`echo $ULA | cut -d'/' -f1`
+        printf 'server 127.0.0.1\nupdate add %s 2147483647 IN AAAA %s\nsend\n' $dns_name $LANv6addr > $work_dir/ns_update.content
+        cat $work_dir/ns_update.content
+        $nsupdate_cmd $work_dir/ns_update.content
+        
+        #update ip6 ULA PTR record
+        LANv6addr_arpa=`echo ${LANv6longULA:31:1}`
+        i=31
+        while [ "$i" != "0" ]
+        do
+            i=$(($i-1))
+            LANv6addr_arpa=`echo $LANv6addr_arpa.${LANv6longULA:$i:1}`
+        done
+        echo "LANv6addr_arpa(ULA)=$LANv6addr_arpa"
+        printf 'server 127.0.0.1\nupdate add %s.ip6.arpa. 2147483647 IN PTR %s.\nsend\n' $LANv6addr_arpa $dns_name > $work_dir/ns_update.content
+        cat $work_dir/ns_update.content
+        $nsupdate_cmd $work_dir/ns_update.content            
+    fi
+    
+    if [ "$with_GUA" == "1" ]; then
+        #update ip6 GUA AAAA record
+        LANv6addr=`echo $GUA | cut -d'/' -f1`            
+        printf 'server 127.0.0.1\nupdate add %s 2147483647 IN AAAA %s\nsend\n' $dns_name $LANv6addr > $work_dir/ns_update.content
+        cat $work_dir/ns_update.content
+        $nsupdate_cmd $work_dir/ns_update.content
+        
+        #update ip6 GUA PTR record
+        LANv6addr_arpa=`echo ${LANv6longGUA:31:1}`
+        i=31
+        while [ "$i" != "0" ]
+        do
+            i=$(($i-1))
+            LANv6addr_arpa=`echo $LANv6addr_arpa.${LANv6longGUA:$i:1}`
+        done
+        echo "LANv6addr_arpa(GUA)=$LANv6addr_arpa"
+        printf 'server 127.0.0.1\nupdate add %s.ip6.arpa. 2147483647 IN PTR %s.\nsend\n' $LANv6addr_arpa $dns_name > $work_dir/ns_update.content
+        cat $work_dir/ns_update.content
+        $nsupdate_cmd $work_dir/ns_update.content            
+    fi
+}
+
+start() {
+    #prepare runtime conf and db files
+    [ -d $work_dir ] || {
+        mkdir -p $work_dir
+    }
+    
+    #todo: this should be replaced such that named.conf and db.xxx are generated
+    #      based on such as /etc/config/bind/named
+    #rm $work_dir/*
+    cp /etc/bind/* $work_dir/
+    
+    prepare_named_conf
+    
+    echo Starting isc-bind
+
+    /usr/sbin/named -c $config_file
+
+    if [ $? -ne 0 ]
+    then
+        echo "  isc-bind failed to start"
+    else
+        #insert 127.0.0.1 in resolv.conf
+        grep "127.0.0.1" $resolve_file
+        if [ $? -eq 1 ]; then
+            if [ -s $resolve_file ]; then
+                sed '1 i\nameserver 127.0.0.1' $resolve_file > $resolve_file.tmp
+                mv -f $resolve_file.tmp $resolve_file
+            else
+                echo "nameserver 127.0.0.1" > $resolve_file
+            fi
+        fi
+        
+        update_records
+    fi
+}
+
+stop() {
+    echo "Stopping isc-bind"
+    if [ -e $pid_file ]
+    then
+        kill `cat $pid_file`
+
+        if [ $? -eq 0 ]
+        then
+            echo "  PID " `cat $pid_file` not found
+            echo "  Is the named server running?"
+        fi
+        
+        rm $pid_file
+        
+        #remove 127.0.0.1 from resolv.conf
+        grep "127.0.0.1" $resolve_file
+        if [ $? -eq 0 ]; then
+            sed '/127.0.0.1/d' $resolve_file > $resolve_file.tmp
+            mv -f $resolve_file.tmp $resolve_file
+        fi
+    else
+        echo "  $pid_file not found"
+    fi
+}
+
+restart() {
+    echo "Restarting isc-bind"
+    
+    if [ -e $pid_file ]
+    then
+        kill `cat $pid_file`
+    fi
+    
+    cp /etc/bind/named.conf $work_dir/
+    prepare_named_conf
+    
+    /usr/sbin/named -c $config_file
+
+    if [ $? -ne 0 ]
+    then
+        echo "  isc-bind failed to start"
+    else
+        update_records
+    fi    
+}

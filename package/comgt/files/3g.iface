@@ -1,0 +1,29 @@
+include /lib/network
+echo "I am in 3g iptables~ not 3g@@" >> /tmp/3glog
+config_load network
+scan_interfaces
+. /usr/sbin/iptables_utility.sh
+
+config_get proto "$INTERFACE" proto
+[ "$proto" = "3g" ] && {
+	config_get iface "$INTERFACE" ifname
+	echo "I am in 3g iptables!!" >> /tmp/3glog
+	case "$ACTION" in
+		ifup)
+			ipt_lock_res
+			iptables -I LAN_ACCEPT 1 -i "$iface" -j RETURN
+			iptables -A FORWARD -o "$iface" -j ACCEPT
+			iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
+			ipt_unlock_res
+			set_3g_led 1 1 0
+		;;
+		ifdown)
+			ipt_lock_res
+			iptables -D LAN_ACCEPT -i "$iface" -j RETURN
+			iptables -D FORWARD -o "$iface" -j ACCEPT
+			iptables -t nat -D POSTROUTING -o "$iface" -j MASQUERADE
+			ipt_unlock_res
+			set_3g_led 0 0 0
+		;;
+	esac
+}

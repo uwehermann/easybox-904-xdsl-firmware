@@ -1,0 +1,49 @@
+#!/bin/sh
+# This script is executed as part of the hotplug event with
+# HOTPLUG_TYPE=iface, triggered by various scripts when an interface
+# is configured (ACTION=ifup) or deconfigured (ACTION=ifdown).  The
+# interface is available as INTERFACE, the real device as DEVICE.
+
+[ "$DEVICE" == "lo" ] && exit 0
+
+. /etc/functions.sh
+. /lib/firewall/core.sh
+. /usr/sbin/iptables_utility.sh
+fw_init
+fw_is_loaded || exit 0
+
+tmpFile="/tmp/ifhotplug.log"
+
+case "$ACTION" in
+	ifup)
+		line="fw_configure_interface \"$INTERFACE\" add \"$DEVICE\""
+		#echo "$line" >> /tmp/if.log
+		if [ -f $tmpFile ]; then
+			isAdd=`grep "$line" "$tmpFile" | wc -l`
+		else
+			isAdd=0
+		fi
+		#echo "isAdd $isAdd" >> /tmp/if.log
+		if [ $isAdd -eq 0 ]; then
+			ipt_lock_res
+			fw_configure_interface "$INTERFACE" add "$DEVICE"
+			ipt_unlock_res
+			echo "fw_configure_interface \"$INTERFACE\" add \"$DEVICE\" " >> $tmpFile
+		fi
+	;;
+	ifdown)
+		#echo "fw_configure_interface \"$INTERFACE\" del \"$DEVICE\"" >> /tmp/if.log
+		if [ "${DEVICE:0:3}" = "ppp" ]; then
+			ondemand=`ccfg_cli get on-demand@$INTERFACE`
+		fi
+		if [ $ondemand -eq 0 ]; then
+			ipt_lock_res
+			fw_configure_interface "$INTERFACE" del "$DEVICE"
+			line="fw_configure_interface \"$INTERFACE\" add \"$DEVICE\""
+			sed -i '/'"$line"'/d' $tmpFile
+			ipt_unlock_res
+		#else
+			#echo "ifdown: skip" >> /tmp/if.log
+		fi
+	;;
+esac

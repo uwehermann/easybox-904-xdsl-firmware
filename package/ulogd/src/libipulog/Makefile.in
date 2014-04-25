@@ -1,0 +1,23 @@
+#
+
+include @top_srcdir@/Rules.make
+CFLAGS+=-Iinclude -I/usr/src/linux/include
+
+libipulog.a: libipulog.o
+	$(LD) -i $< -o $@
+
+distrib:
+
+ulog_test: ulog_test.c libipulog.a
+	$(CC) $(CFLAGS) ulog_test.c libipulog.a -o ulog_test
+
+libipulog.o: libipulog.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	$(RM) ulog_test libipulog.o libipulog.a
+
+distclean: clean
+	$(RM) Makefile
+
+install: libipulog.a

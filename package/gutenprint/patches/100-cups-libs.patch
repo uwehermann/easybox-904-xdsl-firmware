@@ -1,0 +1,10 @@
+--- ./configure~	2011-12-12 00:33:51.155488473 -0800
++++ ./configure	2011-12-12 00:34:11.273488098 -0800
+@@ -17365,6 +17365,7 @@ IFS=$as_save_IFS
+ esac
+ fi
+ CUPS_CONFIG=$ac_cv_path_CUPS_CONFIG
++CUPS_CONFIG=""
+ if test -n "$CUPS_CONFIG"; then
+   { $as_echo "$as_me:${as_lineno-$LINENO}: result: $CUPS_CONFIG" >&5
+ $as_echo "$CUPS_CONFIG" >&6; }

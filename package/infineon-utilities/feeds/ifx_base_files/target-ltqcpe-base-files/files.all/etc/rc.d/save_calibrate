@@ -1,0 +1,8 @@
+#!/bin/sh
+
+cp -f /ramdisk/flash/calibration /tmp
+cd /tmp
+/bin/gzip calibration
+/usr/sbin/upgrade calibration.gz calibration 0
+/bin/rm -f calibration.gz
+cd /root

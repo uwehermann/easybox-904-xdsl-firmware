@@ -1,0 +1,101 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+eval wan_6rd='$'wan_${2}_tunnel
+if [ "$ipv6_status" = "1" -a "$wan_6rd" = "1" -a "$wan_sixrdwanidx" = "$2" -a "$wan_sixrd_mode" = "0" ]; then
+        sixrd_option="-O sixrd"
+else
+        sixrd_option=""
+fi
+
+if [ "$1" = "lan_start" ]; then
+	eval iface='$'lan_main_${2}_interface
+else
+	eval ifType='$'wan_${2}_ifType
+	if [ "$ifType" = "nas" -o "$ifType" = "eth" -o "$ifType" = "ptm" ]; then
+		eval wan_iface='$'wan_${2}_iface
+		eval wan_vid='$'wan_${2}_vlanId
+	elif [ "$ifType" = "atm" ]; then
+		eval wan_iface='$'wanip_${2}_if${ifType}
+	fi
+	if [ "$wan_iface" = "ptm0.0" ]; then
+		wan_iface="ptm0"
+	fi
+	iface=$wan_iface
+fi
+
+case "$1" in
+	start)
+		#start
+		shift
+                /sbin/udhcpc -b -i $iface $sixrd_option  -p /var/run/udhcpc$1.pid -s /etc/rc.d/udhcpc.script &
+		;;
+	lan_start)
+		#start
+		shift
+		/sbin/udhcpc -b -i $iface -p /var/run/udhcpc$1.pid -s /etc/rc.d/udhcpc_lan.script &
+		;;
+	stop)
+		#stop
+		shift
+		/etc/rc.d/killproc udhcpc$1
+		;;
+	restart)
+		#restart
+		shift
+		/etc/rc.d/killproc udhcpc$1
+                /sbin/udhcpc -b -i $iface $sixrd_option  -p /var/run/udhcpc$1.pid -s /etc/rc.d/udhcpc.script &
+		;;
+	lan_restart)
+		#restart
+		shift
+		/etc/rc.d/killproc udhcpc$1
+		/sbin/udhcpc -b -i $iface -p /var/run/udhcpc$1.pid -s /etc/rc.d/udhcpc_lan.script &
+		;;
+	release|renew)
+                #release or renew
+                mode=$1
+                pid=""
+                shift
+                if [ -f /var/run/udhcpc$1.pid ]; then
+#                       line=`cat /var/run/udhcpc$1.pid | cut -f1 -d' '`
+#                       for p in $line; do
+#                               pid="$pid $p"
+#                       done
+                        while read line
+                        do
+                                p=${line%% *}
+                                pid="$pid $p"
+                        done  < /var/run/udhcpc$1.pid
+                fi
+                echo "pid = $pid"
+		case $mode in
+			release) sig=USR2 ;;
+			renew)   sig=USR1 ;;
+		esac
+                if [ -z "$pid" ]; then
+                        echo "udhcpc pid not found"
+                else
+                        kill -$sig $pid
+                        usleep 100000
+                fi
+                ;;
+	*)
+		echo $"Usage $0 {start|stop|restart|release|renew}"
+		#exit 1
+esac
+
+#exit $?

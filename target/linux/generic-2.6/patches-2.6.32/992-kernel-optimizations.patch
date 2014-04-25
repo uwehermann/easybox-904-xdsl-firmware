@@ -1,0 +1,16 @@
+Index: linux-2.6.32.11/include/linux/limits.h 
+===================================================================
+--- linux-2.6.32.11.orig/include/linux/limits.h
++++ linux-2.6.32.11/include/linux/limits.h
+@@ -3,7 +3,11 @@
+ 
+ #define NR_OPEN	        1024
+ 
++#if defined(CONFIG_LTQ_OPTIMIZATION) || defined(CONFIG_FEATURE_LQ_OPTIMIZATION)
++#define NGROUPS_MAX    64	/* supplemental group IDs are available */
++#else
+ #define NGROUPS_MAX    65536	/* supplemental group IDs are available */
++#endif
+ #define ARG_MAX       131072	/* # bytes of args + environ for exec() */
+ #define LINK_MAX         127	/* # links a file may have */
+ #define MAX_CANON        255	/* size of the canonical input queue */

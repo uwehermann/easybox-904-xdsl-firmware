@@ -1,0 +1,105 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+START=22
+### ctc ###
+#STOP=90
+###########
+
+include() {
+	local file
+
+	for file in $(ls $1/*.sh 2>/dev/null); do
+		. $file
+	done
+}
+
+boot() {
+	setup_switch() { return 0; }
+
+	### ygchen ###
+	ip6_enable=`ccfg_cli get ip6_enable@system`
+	[ "$ip6_enable" != "1" ] && echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
+	###########
+
+	include /lib/network
+	setup_switch
+	### ctc ###
+	ifup2 -a
+	### bitonic(20121130)
+	### In order to speed up DSL training, we do the following modification.
+	### 1. disable switch ports
+	### 2. load ppa module
+	### 3. enable switch ports
+	### 4. run dsl related script files
+	### 5. do switch related config
+	####/usr/sbin/setup_netdev.sh port-disable
+	####/usr/sbin/setup_netdev.sh system
+
+	/usr/sbin/setup_netdev.sh switch-phy-disable
+	/usr/sbin/setup_netdev.sh ppadev
+	/usr/sbin/setup_netdev.sh switch
+#	grep -qs config /etc/config/wireless && {
+#		/sbin/wifi up
+#	} || {
+#		rm -f /etc/config/wireless
+#		/sbin/wifi detect > /etc/config/wireless
+#	}
+#
+#	scan_interfaces
+#
+#	local ifc
+#	for ifc in $interfaces; do
+#		local proto
+#		config_get proto "$ifc" proto
+#
+#		local auto
+#		config_get_bool auto "$ifc" auto 1
+#
+#		type "coldplug_interface_$proto" >/dev/null && [ "$auto" = 1 ] && \
+#			coldplug_interface_$proto "$ifc"
+#	done
+	###########
+
+	### bitonic ###
+	create-ca-cert.sh
+	###########
+}
+
+start() {
+	setup_switch() { return 0; }
+
+	### ygchen ###
+	ip6_enable=`ccfg_cli get ip6_enable@system`
+	[ "$ip6_enable" != "1" ] && echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
+	###########
+
+	include /lib/network
+	setup_switch
+	ifup -a
+	### ctc ###
+#	/sbin/wifi up
+	###########
+}
+
+stop() {
+	ifdown -a
+}
+
+restart() {
+	start
+}
+
+
+case "$1" in
+	"boot")		boot	;;
+	"start")	start	;;
+	"stop")		stop	;;
+	"restart")	restart	;;
+	*)
+				echo $0 'boot    - setup and start network function'
+				echo $0 'start   - start network function'
+				echo $0 'stop    - stop network function'
+				echo $0 'restart - restart network function'
+				;;
+esac

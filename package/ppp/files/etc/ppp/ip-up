@@ -1,0 +1,45 @@
+#!/bin/sh
+. /etc/functions.sh
+PPP_IFACE="$1"
+PPP_TTY="$2"
+PPP_SPEED="$3"
+PPP_LOCAL="$4"
+PPP_REMOTE="$5"
+PPP_IPPARAM="$6"
+PPP_DNS="$7"
+PPP_UNIT="${PPP_IFACE##ppp}"
+
+export PPP_IFACE PPP_TTY PPP_SPEED PPP_LOCAL PPP_REMOTE PPP_IPPARAM
+[ -z "$PPP_IPPARAM" -o -z "$PPP_LOCAL" ] || {
+	uci_set_state network "$PPP_IPPARAM" unit "$PPP_UNIT"
+	uci_set_state network "$PPP_IPPARAM" ipaddr "$PPP_LOCAL"
+	uci_set_state network "$PPP_IPPARAM" gateway "$PPP_REMOTE"
+	cat /proc/uptime > /tmp/ifup-time
+}
+[ -z "$PPP_IPPARAM" ] || env -i ACTION="ifup" INTERFACE="$PPP_IPPARAM" DEVICE="$PPP_IFACE" PROTO=ppp IP4ADDR="$PPP_LOCAL" IP4MASK="255.255.255.255" IP4GW="$PPP_REMOTE" /sbin/hotplug-call "iface"
+
+[ -d /etc/ppp/ip-up.d ] && {
+	for SCRIPT in /etc/ppp/ip-up.d/*
+	do
+		[ -x "$SCRIPT" ] && "$SCRIPT" $@
+	done
+}
+
+
+### ctc added 20110516 ###
+
+/usr/sbin/arc-ipv4-linkup.sh $PPP_IPPARAM $PPP_LOCAL "255.255.255.255" $PPP_REMOTE
+touch /tmp/ppp_conn_up
+
+SIP_SVR=`/usr/sbin/umngcli get registrar@sip_acc_1`
+if [ -z ${SIP_SVR} ] ; then
+	SIP_SVR=`/usr/sbin/umngcli get registrar@sip_acc_2`
+fi
+if [ -z ${SIP_SVR} ] ; then
+	exit 1
+fi
+
+arc_led.sh wan on
+
+##########################
+
