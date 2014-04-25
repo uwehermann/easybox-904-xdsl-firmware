@@ -261,6 +261,16 @@ else
 	--without-webdav-props
 endif
 
+
+define Build/Prepare
+	$(call Build/Prepare/Default)
+	echo ========================================================================
+	echo $(CP) src/* $(PKG_BUILD_DIR)/
+	echo ========================================================================
+	$(CP) src/* $(PKG_BUILD_DIR)/
+endef
+
+
 define Build/Configure
 $(call Build/Configure/Default)
 	# XXX: override pcre (mis)detection by ./configure when cross-compiling

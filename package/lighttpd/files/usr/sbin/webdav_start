@@ -583,7 +583,7 @@ webdav_folder_add()
 			echo "\$SERVER[\"socket\"] == \":${remote_port}\" { " >> /tmp/lighttpd.conf
 			echo 'ssl.engine = "enable"'  >> /tmp/lighttpd.conf
 			echo 'ssl.pemfile = "/tmp/webdav/lighttpd.pem"'  >> /tmp/lighttpd.conf
-			echo 'server.document-root = "/tmp/nas"'  >> /tmp/lighttpd.conf
+			echo 'server.document-root = "/tmp"'  >> /tmp/lighttpd.conf
 			echo '}'  >> /tmp/lighttpd.conf
 		fi
 		/usr/sbin/lighttpd -f /tmp/lighttpd.conf
