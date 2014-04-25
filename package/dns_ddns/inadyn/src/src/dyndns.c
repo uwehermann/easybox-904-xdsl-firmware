@@ -35,6 +35,10 @@ Author: Narcis Ilisei
 #define MODULE_TAG      "INADYN: "  
 #include <stdlib.h>
 #include <string.h>
+
+#include <stdarg.h> //Added by Fallen for SetDDNSSystemLog function
+#include "umng_syslog_define_for_opensource.h" //Added by Fallen for system log supporting
+
 #include "dyndns.h"
 #include "debug_if.h"
 #include "base64.h"
@@ -46,18 +50,31 @@ DYNDNS_ORG_SPECIFIC_DATA dyndns_org_dynamic = {"dyndns"};
 DYNDNS_ORG_SPECIFIC_DATA dyndns_org_custom = {"custom"};
 DYNDNS_ORG_SPECIFIC_DATA dyndns_org_static = {"statdns"};
 
+//Added by Fallen for system log on UI
+static void SetDDNSSystemLog(unsigned char *logLevelStr, unsigned char *logFacilityStr, const char *fmt, ...);
+
+//Added by Fallen - selfHOST
+static int get_req_for_selfhost_server(DYN_DNS_CLIENT *this, int nr, DYNDNS_SYSTEM *p_sys_info);
 static int get_req_for_dyndns_server(DYN_DNS_CLIENT *this, int nr, DYNDNS_SYSTEM *p_sys_info);
+static int get_req_for_tzo_server(DYN_DNS_CLIENT *p_self, int nr, DYNDNS_SYSTEM *p_sys_info);
 static int get_req_for_freedns_server(DYN_DNS_CLIENT *p_self, int cnt,  DYNDNS_SYSTEM *p_sys_info);
 static int get_req_for_generic_http_dns_server(DYN_DNS_CLIENT *p_self, int cnt,  DYNDNS_SYSTEM *p_sys_info);
 static int get_req_for_noip_http_dns_server(DYN_DNS_CLIENT *p_self, int cnt,  DYNDNS_SYSTEM *p_sys_info);
 
 static BOOL is_dyndns_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p_ok_string);
+static BOOL is_tzo_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p_ok_string);
 static BOOL is_freedns_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p_ok_string);
 static BOOL is_generic_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p_ok_string);
 static BOOL is_zoneedit_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p_ok_string);
 
 DYNDNS_SYSTEM_INFO dns_system_table[] = 
-{ 
+{
+	{DYNDNS_DEFAULT,	//Added by Fallen - selfHOST
+		{"default@selfhost.de", &dyndns_org_dynamic,
+			(DNS_SYSTEM_SRV_RESPONSE_OK_FUNC)is_dyndns_server_rsp_ok,
+			(DNS_SYSTEM_REQUEST_FUNC)get_req_for_selfhost_server,
+			DYNDNS_MY_IP_SERVER, DYNDNS_MY_IP_SERVER_URL,
+			"carol.selfhost.de", "/update?", NULL}},
     {DYNDNS_DEFAULT, 
         {"default@dyndns.org", &dyndns_org_dynamic, 
             (DNS_SYSTEM_SRV_RESPONSE_OK_FUNC)is_dyndns_server_rsp_ok, 
@@ -82,6 +99,13 @@ DYNDNS_SYSTEM_INFO dns_system_table[] =
             (DNS_SYSTEM_REQUEST_FUNC) get_req_for_dyndns_server,
              DYNDNS_MY_IP_SERVER, DYNDNS_MY_IP_SERVER_URL,
 				DYNDNS_MY_DNS_SERVER, DYNDNS_MY_DNS_SERVER_URL, NULL}},
+
+	{TZO_DEFAULT,	//Added by Fallen - TZO
+		{"default@tzo.com", NULL,
+			(DNS_SYSTEM_SRV_RESPONSE_OK_FUNC)is_tzo_server_rsp_ok,
+			(DNS_SYSTEM_REQUEST_FUNC)get_req_for_tzo_server,
+			DYNDNS_MY_IP_SERVER, DYNDNS_MY_IP_SERVER_URL,
+			"rh.tzo.com", "/webclient/tzoperl.html?", NULL}},
 
     {FREEDNS_AFRAID_ORG_DEFAULT, 
         {"default@freedns.afraid.org", NULL,  
@@ -156,6 +180,18 @@ static RC_TYPE dyn_dns_wait_for_cmd(DYN_DNS_CLIENT *p_self)
 	return RC_OK;
 }
 
+static int get_req_for_selfhost_server(DYN_DNS_CLIENT *p_self, int cnt, DYNDNS_SYSTEM *p_sys_info)
+{
+	(void)p_sys_info;
+	return sprintf(p_self->p_req_buffer, SELFHOST_GET_MY_IP_HTTP_REQUEST_FORMAT,
+					p_self->info.dyndns_server_name.name,
+					p_self->info.dyndns_server_name.port,
+					p_self->info.dyndns_server_url,
+					p_self->info.credentials.my_username,
+					p_self->info.credentials.my_password,
+					p_self->info.dyndns_server_name.name);
+}
+
 static int get_req_for_dyndns_server(DYN_DNS_CLIENT *p_self, int cnt,DYNDNS_SYSTEM *p_sys_info)
 {	
     DYNDNS_ORG_SPECIFIC_DATA *p_dyndns_specific = 
@@ -171,6 +207,20 @@ static int get_req_for_dyndns_server(DYN_DNS_CLIENT *p_self, int cnt,DYNDNS_SYST
         p_self->info.dyndns_server_name.name,
 		p_self->info.credentials.p_enc_usr_passwd_buffer
 		);
+}
+
+static int get_req_for_tzo_server(DYN_DNS_CLIENT *p_self, int cnt, DYNDNS_SYSTEM *p_sys_info)
+{
+	(void)p_sys_info;
+	return sprintf(p_self->p_req_buffer, TZO_GET_MY_IP_HTTP_REQUEST_FORMAT,
+					p_self->info.dyndns_server_name.name,
+					p_self->info.dyndns_server_name.port,
+					p_self->info.dyndns_server_url,
+					p_self->alias_info.names[cnt].name,
+					p_self->info.credentials.my_username,
+					p_self->info.credentials.my_password,
+					p_self->info.my_ip_address.name,
+					p_self->info.dyndns_server_name.name);
 }
 
 static int get_req_for_freedns_server(DYN_DNS_CLIENT *p_self, int cnt, DYNDNS_SYSTEM *p_sys_info)
@@ -367,6 +417,16 @@ static BOOL is_dyndns_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p
              (strstr(p_rsp, DYNDNS_OK_NOCHANGE) != NULL) );
 }
 
+/* TZO.specific response validator.
+    '200' or '304' are the good answers,
+*/
+static BOOL is_tzo_server_rsp_ok( DYN_DNS_CLIENT *p_self, char*p_rsp, char* p_ok_string)
+{
+	(void) p_ok_string;
+    return ( (strstr(p_rsp, TZO_OK_RESPONSE) != NULL) ||
+             (strstr(p_rsp, TZO_OK_NOCHANGE) != NULL) );
+}
+
 /* Freedns afraid.org.specific response validator.
     ok blabla and n.n.n.n
     fail blabla and n.n.n.n
@@ -427,6 +487,10 @@ static RC_TYPE do_update_alias_table(DYN_DNS_CLIENT *p_self)
 			
 			/*build dyndns transaction*/
 			{
+				SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, 
+					"DDNS: Updating...\n");
+				system("echo 1 > /tmp/ddns_status.log");
+				
 				HTTP_TRANSACTION http_tr;
 				http_tr.req_len = p_self->info.p_dns_system->p_dns_update_req_func(
                         (struct _DYN_DNS_CLIENT*) p_self,i,
@@ -460,17 +524,44 @@ static RC_TYPE do_update_alias_table(DYN_DNS_CLIENT *p_self)
 							p_self->alias_info.names[i].name,
 							p_self->info.my_ip_address.name));                        
 						p_self->times_since_last_update = 0;
-							
+						
+						SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, 
+							"DDNS: Domain name '%s' to IP '%s' updated successfully.\n", 
+							p_self->alias_info.names[i].name, 
+							p_self->info.my_ip_address.name);
+						system("echo 0 > /tmp/ddns_status.log");	
 					}
 					else
 					{
 						DBG_PRINTF((LOG_WARNING,"W:" MODULE_TAG "Error validating DYNDNS svr answer. Check usr,pass,hostname,abuse...!\n", http_tr.p_rsp));
-                        rc = RC_DYNDNS_RSP_NOTOK;						
+                        rc = RC_DYNDNS_RSP_NOTOK;
+                        
+                        SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, 
+                        	"DDNS: Update error. Check account, password, and domain name\n");
+						system("echo 1 > /tmp/ddns_status.log");
 					}
 					if (p_self->dbg.level > 2 || !update_ok)
 					{							
 						http_tr.p_rsp[http_tr.rsp_len] = 0;
 						DBG_PRINTF((LOG_WARNING,"W:" MODULE_TAG "DYNDNS Server response:\n%s\n", http_tr.p_rsp));
+						
+						char *temp = strstr(http_tr.p_rsp, "\r\n\r\n");
+						if(temp)
+						{
+							temp = temp + 4;
+							
+							char *newline;
+							for(newline = strstr(temp, "\r\n"); 
+								newline; 
+								newline = strstr(newline, "\r\n"))
+							{
+								*newline++ = ' ';
+								*newline++ = ' ';
+							}
+							
+							SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, 
+								"DDNS: Server response: [%s]\n", temp);
+						}
 					}
 				}
 			}
@@ -1014,4 +1105,31 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndns, int argc, char* argv[])
 	while(FALSE);	
 	
 	return rc;
+}
+
+//Added by Fallen for system log on UI
+static void SetDDNSSystemLog(unsigned char *logLevelStr, unsigned char *logFacilityStr, const char *fmt, ...)
+{
+	char cmd_str[1024];
+	va_list ap;
+	register char *p;
+	char *last_chr, *head_end, *end, *stdp;
+	char tbuf[1024];	/* syslogd is unable to handle longer messages */
+
+	va_start(ap, fmt);
+
+	head_end = stdp = p = tbuf;
+	end = tbuf + sizeof(tbuf) - 1;
+	p += vsnprintf(p, end - p, fmt, ap);
+	if (p >= end) {	/* Returned -1 in case of error... */
+		p = end - 1;
+	}
+	last_chr = p;
+
+	/* Output the message to the local logger using NUL as a message delimiter. */
+	*last_chr = 0;
+
+	sprintf(cmd_str, "umng_syslog_cli add %d %s %s \"%s\"", LOG_TYPE_AP_DDNS_DYNDNS, logLevelStr, logFacilityStr, tbuf); // LOG_TYPE_LINK_PPP
+	system(cmd_str);
+	va_end(ap);
 }

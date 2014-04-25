@@ -188,6 +188,7 @@ setup_interface () {
 
 scan_interfaces
 applied=
+intf=`if2sect.sh ${interface}`
 for ifc in $interfaces __default; do
 	if [ "$ifc" = __default ]; then
 		ifc=""
@@ -239,14 +240,14 @@ for ifc in $interfaces __default; do
 			}
 			## bitonic update, ctc add
 			. /usr/sbin/arc-ipv4-linkdown.sh $ifc
-			#umng_syslog_cli add 11 Info Wan "DHCP client deconfig WAN$((${interface:3:1}+1))"
+			#umng_syslog_cli add 11 Info Wan "DHCP client deconfig WAN$((${intf:5:1}+1))"
 			arc_led.sh wan on
 			## end of bitonic update
 		;;
 		renew)
 			setup_interface update
 			## ctc add
-			umng_syslog_cli add 11 Info Wan "DHCP client renew WAN$((${interface:3:1}+1))"
+			umng_syslog_cli add 11 Info Wan "DHCP client renew WAN$((${intf:5:1}+1))"
 			## end of bitonic update
 		;;
 		bound)
@@ -254,11 +255,39 @@ for ifc in $interfaces __default; do
 			## bitonic update, ctc add
 			cat /proc/uptime > /tmp/ifup-time
 			. /usr/sbin/arc-ipv4-linkup.sh $ifc $ip ${subnet:-255.255.255.0} $DEFAULT_ROUTER
-			umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${interface:3:1}+1)) IP $ip subnet ${subnet:-255.255.255.0} gateway $DEFAULT_ROUTER"
+			
+			dns1=`echo "$dns" | cut -d ' ' -f 1`
+			dns2=`echo "$dns" | cut -d ' ' -f 2`
+			
+			if [ $lease -ge 0 ] 2>/dev/null ;then
+				HR=$((${lease}/3600))
+				temp=$((${lease}%3600))
+				MI=$((${temp}/60))
+				temp=$((${temp}%60))
+				SE=$temp
+				leasetime="${HR}h:${MI}m:${SE}s"
+			else
+				leasetime="Forever"
+			fi
+			
+			umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${intf:5:1}+1)) IP:$ip Subnet:${subnet:-255.255.255.0}"
+			if [ -n $dns1 ] ; then
+				umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${intf:5:1}+1)) Primary DNS:$dns1"
+			fi
+			if [ -n $dns2 ] ; then
+				umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${intf:5:1}+1)) Second DNS:$dns2"
+			fi
+			umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${intf:5:1}+1)) Gateway:$DEFAULT_ROUTER"
+			umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${intf:5:1}+1)) Domain:$domain"
+			umng_syslog_cli add 11 Info Wan "DHCP client bound WAN$((${intf:5:1}+1)) lease time:$leasetime"
 			arc_led.sh wan off
 			## end of bitonic update
 		;;
 	esac
+	
+	if [ -z $ip ] ; then
+		umng_syslog_cli add 11 Info Wan "Couldn't find DHCP-Server deamon"
+	fi
 
 done
 

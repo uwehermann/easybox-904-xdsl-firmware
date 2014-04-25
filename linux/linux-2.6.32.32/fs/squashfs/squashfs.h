@@ -23,7 +23,19 @@
 
 #define TRACE(s, args...)	pr_debug("SQUASHFS: "s, ## args)
 
+#if 1 /* Switch to another image once squash error happens */
+#include <linux/kmod.h>
+#define ERROR(s, args...) \
+do { \
+	pr_err("SQUASHFS error: "s, ## args); \
+	char path[256] = "/usr/sbin/switch_image"; \
+	char *argv[] = { path, NULL }; \
+	static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL }; \
+	call_usermodehelper(path, argv, envp, 1); \
+} while (0)
+#else
 #define ERROR(s, args...)	pr_err("SQUASHFS error: "s, ## args)
+#endif
 
 #define WARNING(s, args...)	pr_warning("SQUASHFS: "s, ## args)
 

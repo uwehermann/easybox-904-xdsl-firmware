@@ -563,26 +563,38 @@ start_ethsw_ethernet()
 
 			if [ "$VOIP_INTERFACE_ENABLE" == "1" ] ; then
 				switch_utility VLAN_PortCfgSet $ETH_WAN_PORT $VOIP_VID 0 0 3 0 0
+				#VLAN_TAGGED=`ccfg_cli get vlan_tagged@$VOIP_SECTION_NAME`
+				if [ "$VOIP_TAGGED_VLAN" != "1" ]; then
+					IF_MAC=`getmacaddr.sh wan 1`
+				else
+					IF_MAC=`getmacaddr.sh wan 0`
+				fi
 				IFNAME=`ccfg_cli get ifname@$VOIP_SECTION_NAME`
 				ifconfig $IFNAME down
-				ifconfig $IFNAME hw ether `getmacaddr.sh wan 1`
+				ifconfig $IFNAME hw ether $IF_MAC
 				ifconfig $IFNAME up
 
-				switch_utility MAC_TableEntryRemove 0 `getmacaddr.sh wan 1`
-				switch_utility MAC_TableEntryAdd 2 $ETH_WAN_PORT 0 1 `getmacaddr.sh wan 1`
-				switch_utility MAC_TableEntryAdd 2 $CPU_PORT 0 1 `getmacaddr.sh wan 1`
+				switch_utility MAC_TableEntryRemove 0 $IF_MAC
+				switch_utility MAC_TableEntryAdd 2 $ETH_WAN_PORT 0 1 $IF_MAC
+				switch_utility MAC_TableEntryAdd 2 $CPU_PORT 0 1 $IF_MAC
 			fi
 
 			if [ "$IPTV_INTERFACE_ENABLE" == "1" ] ; then
 				switch_utility VLAN_PortCfgSet $ETH_WAN_PORT $IPTV_VID 0 0 3 0 0
+				#VLAN_TAGGED=`ccfg_cli get vlan_tagged@$IPTV_SECTION_NAME`
+				if [ "$IPTV_TAGGED_VLAN" != "1" ]; then
+					IF_MAC=`getmacaddr.sh wan 2`
+				else
+					IF_MAC=`getmacaddr.sh wan 0`
+				fi 
 				IFNAME=`ccfg_cli get ifname@$IPTV_SECTION_NAME`
 				ifconfig $IFNAME down
-				ifconfig $IFNAME hw ether `getmacaddr.sh wan 2`
+				ifconfig $IFNAME hw ether $IF_MAC
 				ifconfig $IFNAME up
 
-				switch_utility MAC_TableEntryRemove 0 `getmacaddr.sh wan 2`
-				switch_utility MAC_TableEntryAdd 2 $ETH_WAN_PORT 0 1 `getmacaddr.sh wan 2`
-				switch_utility MAC_TableEntryAdd 2 $CPU_PORT 0 1 `getmacaddr.sh wan 2`
+				switch_utility MAC_TableEntryRemove 0 $IF_MAC
+				switch_utility MAC_TableEntryAdd 2 $ETH_WAN_PORT 0 1 $IF_MAC
+				switch_utility MAC_TableEntryAdd 2 $CPU_PORT 0 1 $IF_MAC
 			fi
 		fi
 
@@ -1165,6 +1177,11 @@ start_ethsw_adsl()
 		## ygchen, since we use different FIDs for LAN and WAN groups, it's not necessary to do the function below
 		## but please don't remove it (for reference)
 	    #check_bridging_vlan $ACTIVE_WAN_TYPE "$ETH_LAN1_PORT" "$ETH_LAN2_PORT" "$ETH_LAN3_PORT" "$ETH_LAN4_PORT"
+                local protocol=`ccfg_cli get proto@wan000`
+                if [ "$protocol" == "none" ]; then
+                        switch_utility VLAN_PortMemberAdd 66 11 0
+                        switch_utility VLAN_PortCfgSet 11 66 0 0 3 0 0
+                fi
 	else # bridging
 		# Create DSL WAN Per PVC VLAN IDs
 		for argument in $BR_PVC_VID_LIST ; do
@@ -1400,6 +1417,11 @@ start_ethsw_vdsl()
 		## ygchen, since we use different FIDs for LAN and WAN groups, it's not necessary to do the function below
 		## but please don't remove it (for reference)
 	    #check_bridging_vlan $ACTIVE_WAN_TYPE "$ETH_LAN1_PORT" "$ETH_LAN2_PORT" "$ETH_LAN3_PORT" "$ETH_LAN4_PORT"
+		local protocol=`ccfg_cli get proto@wan050`
+		if [ "$protocol" == "none" ]; then
+			switch_utility VLAN_PortMemberAdd 66 11 0
+			switch_utility VLAN_PortCfgSet 11 66 0 0 3 0 0
+		fi
 	else # bridging
 		# DSL WAN Port is default router port map
 		switch_utility MulticastRouterPortAdd $DSL_VPORT
@@ -2449,6 +2471,72 @@ enable_vrx_switch_ports() {
 	done
 }
 
+## for the WMM issue, we need to configure remarking at the egress port connecting to WiFi
+lan_to_wlan_1p_remarking() {
+	local wlan_port_in_port_phyconf
+	local wlan_port
+
+	wlan_port_in_port_phyconf=`ccfg_cli get wlan_port@vlan`
+	let wlan_port_in_port_phyconf=$wlan_port_in_port_phyconf+1
+	wlan_port=`ccfg_cli get port_phyconf@vlan | cut -d ' ' -f $wlan_port_in_port_phyconf`
+
+    ### set LAN port (#0-3) ingress tc mapping method
+    switch_utility QOS_PortCfgSet 0 3 0 #based on DSCP-PCP, dft tc=0
+    switch_utility QOS_PortCfgSet 1 3 0 #based on DSCP-PCP, dft tc=0
+    switch_utility QOS_PortCfgSet 2 3 0 #based on DSCP-PCP, dft tc=0
+    switch_utility QOS_PortCfgSet 3 3 0 #based on DSCP-PCP, dft tc=0
+    ### set CPU port (#6) ingress tc mapping method
+    switch_utility QOS_PortCfgSet 6 3 0 #based on DSCP-PCP, dft tc=0
+    ### set WLAN port ingress tc mapping method
+    switch_utility QOS_PortCfgSet $wlan_port 3 0 #based on DSCP-PCP, dft tc=0
+    
+    ### set ingress dscp-to-tc mapping (global)
+    ### switch_utility QOS_DscpClassSet <Index 0-63> <nTrafficClass data 0-15>
+    dscp_idx=0
+    tc_idx=0
+    while [ "$dscp_idx" -le 64 ]; do
+    switch_utility QOS_DscpClassSet $dscp_idx $tc_idx
+    dscp_idx=$(($dscp_idx+1))
+    tc_idx=$(($dscp_idx/8))
+    done
+    
+    ### set ingress pcp-to-tc mapping (global)
+    ### switch_utility QOS_PcpClassSet <Index> <nTrafficClass data>
+    pcp_idx=0
+    tc_idx=0
+    while [ "$pcp_idx" -le 8 ]; do
+    switch_utility QOS_PcpClassSet $pcp_idx $tc_idx
+    pcp_idx=$(($pcp_idx+1))
+    tc_idx=$pcp_idx
+    done
+    
+    ### set egress tc-to-pcp mapping (global)
+    ### switch_utility QOS_ClassPCPSet <Index> <nTrafficClass data>
+    tc_idx=0
+    pcp_idx=0
+    while [ "$pcp_idx" -le 8 ]; do
+    switch_utility QOS_ClassPCPSet $tc_idx $pcp_idx
+    tc_idx=$(($tc_idx+1))
+    pcp_idx=$(($pcp_idx+1))
+    done
+    
+    ### set LAN port (#0-3) ingress remarking configuration
+    ### switch_utility QOS_PortRemarkingCfgSet <nPortId> <eDSCP_IngressRemarkingEnable> <bDSCP_EgressRemarkingEnable> <bPCP_IngressRemarkingEnable> <bPCP_EgressRemarkingEnable>
+    ###     nPortId:               0..6
+    ###     eDSCP_IngressRemarkingEnable:            0: Disable 1:TC6 2:TC3 3:DP3 4:DP3_TC3
+    ###     bDSCP_EgressRemarkingEnable:             0: Disable 1:Enable
+    ###     bPCP_IngressRemarkingEnable:             0: Disable 1:Enable
+    ###     bPCP_EgressRemarkingEnable:              0: Disable 1:Enable
+    switch_utility QOS_PortRemarkingCfgSet 0 0 0 1 1
+    switch_utility QOS_PortRemarkingCfgSet 1 0 0 1 1
+    switch_utility QOS_PortRemarkingCfgSet 2 0 0 1 1
+    switch_utility QOS_PortRemarkingCfgSet 3 0 0 1 1
+#    ### set CPU port (#6) ingress remarking configuration
+#    switch_utility QOS_PortRemarkingCfgSet 6 0 0 1 1   ##marked because this will affect WAN egress 802.1p remarking
+#    ### set WLAN port egress remarking configuration
+    switch_utility QOS_PortRemarkingCfgSet $wlan_port 0 0 1 1
+}
+
 # . $RC_CONF
 
 case "`ccfg_cli get wan_type@system`" in
@@ -2546,6 +2634,7 @@ case "$1" in
 	"switch")
 		echo "[setup_netdev.sh] start_ethsw" > /dev/console
 		start_ethsw
+		lan_to_wlan_1p_remarking
 		;;
 	"port-enable")
 		echo "[setup_netdev.sh] port-enable" > /dev/console

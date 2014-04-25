@@ -70,6 +70,8 @@ extern long		utilIpInSameSubnet (  unsigned char* byIp1, unsigned char* byIp2, u
 
 extern int		utilParseArgs (char* sArgStr, char* sDelimiters, int iArgc, char** pArgv);
 extern int 		utilGetlockByName(char* filename, int *fd, int type);
+extern long		utilSendMailByProfileID(int id, char* toAccount, char* subject, char* context);
+extern long		utilSendMail(char* toAccount, char* subject, char* context);
 
 #ifdef __cplusplus
 }

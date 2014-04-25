@@ -79,6 +79,17 @@ linux/linux-2.6.32.32/drivers/net/rtl8367_switch_api/
 linux/linux-2.6.32.32/include/rtl8367_switch_api/
 linux/linux-2.6.32.32/include/switch_api/
 linux/linux-2.6.32.32/net/bridge/br_mcast_snooping.c
+linux/linux-2.6.32.32/arch/mips/kernel/traps.c
+linux/linux-2.6.32.32/drivers/net/ifxmips_switch_api/GPHY/ifxmips_vr9_gphy.c
+linux/linux-2.6.32.32/include/linux/netfilter_ipv4/ipt_ULOG.h
+linux/linux-2.6.32.32/include/net/ifx_ppa_api.h
+linux/linux-2.6.32.32/net/atm/br2684.c
+linux/linux-2.6.32.32/net/core/skbuff.c
+linux/linux-2.6.32.32/net/ipv4/netfilter/ipt_ULOG.c
+linux/linux-2.6.32.32/net/ipv4/netfilter/nf_nat_sip.c
+linux/linux-2.6.32.32/net/netfilter/nf_conntrack_sip.c
+linux/linux-2.6.32.32/include/linux/netfilter/nf_conntrack_sip.h
+linux/linux-2.6.32.32/include/net/netfilter/nf_conntrack.h
 
 # quilt's files
 #patches

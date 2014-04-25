@@ -11,6 +11,8 @@
 
 REBOOT=0
 
+FW_UPGRADE_LOG_FILE="/tmp/etc/config/last_fw_upgrade_log.txt"
+
 BACKUP_FILES="/bin/busybox /usr/sbin/httpd-brn"	# special backup files
 BACKUP_DIRS="/bin /usr/bin /usr/sbin"			# size-limited directories
 BACKUP_DIRS2="/sbin /lib /usr/lib"				# size-non-limited directories
@@ -35,6 +37,23 @@ if [ `grep -c "CONFIG_UBOOT_CONFIG_DUAL_IMAGE" /etc/config.sh` -ge 1 ] ; then
 fi
 
 BACKUP_ROOTFS=0
+
+ulog()
+{
+	[[ $3 == 1 ]] && rm ${FW_UPGRADE_LOG_FILE}
+
+	if [ ${1} == "msg" ]; then
+		echo -e "${2}" >> ${FW_UPGRADE_LOG_FILE}
+	elif [ ${1} == "cmd1" ]; then
+		echo -e "\nOutput for command '${2}'" >> ${FW_UPGRADE_LOG_FILE}
+		echo "====================" >> ${FW_UPGRADE_LOG_FILE}
+		eval ${2} >> ${FW_UPGRADE_LOG_FILE}
+	elif [ ${1} == "cmd2" ]; then
+		echo -e "\nOutput for command '${2}'" >> ${FW_UPGRADE_LOG_FILE}
+		echo "====================" >> ${FW_UPGRADE_LOG_FILE}
+		eval ${2} 2>&1 | tee -a ${FW_UPGRADE_LOG_FILE}
+	fi
+}
 
 remount_rootfs()
 {
@@ -129,10 +148,11 @@ partition_write()
 		return 1
 	fi
 
-	nandwrite -m /dev/$DEVNAME $2
+	ulog "cmd2" "nandwrite -m /dev/$DEVNAME $2"
 	
 	if [ "$?" != 0 ] ; then
 		echo ERROR! nandwrite failed
+		ulog "msg" "[partition_write] ERROT! nandwrite failed"
 		return 1
 	fi
 
@@ -148,20 +168,24 @@ image_type()
 	IMAGE_TYPE=NA
 
 	if [ -z "$1" ] || ! [ -f "$1" ] ; then
+		ulog "msg" "\n[image_type] File not existed. $1"
 		return 2
 	fi
 
 	if [ -z "$2" ] || [ "$2" == "full" ] ; then
 		if [ `tail -c 16 $1 | grep -c "UEfullFW"` -eq 1 ] ; then
 			IMAGE_TYPE=fullUEN
+			ulog "msg" "\n[image_type] This is UE full image"
 			return 0
 		fi
 		if [ `tail -c 32 $1 | hexdump -c | awk '{ if ( $2 != "" ) print $2$3$4$5$6$7$8$9$10$11$12$13$14$15$16$17 }' | grep -c -e arcadyan -e ARCADYAN` -eq 2 ] ; then
 			IMAGE_TYPE=full
+			ulog "msg" "\n[image_type] This is Arcadyan full image"
 			return 0
 		fi
 		if [ `hexdump -C -s 32 -n 16 $1 | grep -c 'VR9 Fullimage'` -ge 1 ] ; then
 			IMAGE_TYPE=full
+				ulog "msg" "\n[image_type] This is VR9 full image"
 			return 0
 		fi
 	fi
@@ -170,6 +194,7 @@ image_type()
 		if  [ `hexdump -C -s 32 -n 16 $1 | grep -c 'LTQCPE RootFS'` -ge 1 ] ||
 			[ `hexdump -C -s 64 -n  2 $1 | grep -c '19 85'` -ge 1 ] ; then
 			IMAGE_TYPE=rootfs
+			ulog "msg" "\n[image_type] This is rootfs image"
 			return 0
 		fi
 	fi
@@ -177,6 +202,7 @@ image_type()
 	if [ -z "$2" ] || [ "$2" == "kernel" ] ; then
 		if [ `hexdump -C -s 32 -n 16 $1 | grep -c 'MIPS LTQCPE Linu'` -ge 1 ] ; then
 			IMAGE_TYPE=kernel
+			ulog "msg" "\n[image_type] This is kernel image"
 			return 0
 		fi
 	fi
@@ -193,11 +219,13 @@ image_type()
 			if [ `hexdump -C -n 4 $1        | grep -c '22 0c dd f3'` -ge 1 ] &&
 			   [ `hexdump -C -s 512 -n 4 $1 | grep -c '10 00 00 0b'` -ge 1 ] ; then
 				IMAGE_TYPE=uboot
+				ulog "msg" "\n[image_type] This is uboot image. 1"
 				return 0
 			fi
 		else
 			if [ `hexdump -C -n 4 $1 | grep -c '10 00 00 0b'` -ge 1 ] ; then
 				IMAGE_TYPE=uboot
+				ulog "msg" "\n[image_type] This is uboot image. 2"
 				return 0
 			fi
 		fi
@@ -256,11 +284,17 @@ upgrade_kernel()
 {
 	FILE=$1
 
+	ulog "msg" "\n[upgrade_kernel] Start..."
+	ulog "cmd1" "md5sum $FILE"
+	ulog "cmd1" "stat -c%s $FILE"
+
 	if [ -z "$FILE" ] || ! [ -f "$FILE" ] ; then
+		ulog "msg" "[upgrade_kernel] filename invalid. FILE = $FILE"
 		return 1
 	fi
 
 	if [ $DUAL_IMAGE != 1 ] && [ "$2" == "2" ] ; then
+		ulog "msg" "[upgrade_kernel] Image ID invalid. DUAL_IMAGE = $DUAL_IMAGE. ImageID = $2. Return 2"
 		return 2
 	fi
 
@@ -274,6 +308,7 @@ upgrade_kernel()
 	if [ $? -ne 0 ] ; then
 		rm -f $FILE
 		echo wrong kernel image
+		ulog "msg" "[upgrade_kernel] Invalid kernel image"
 		return 3
 	fi
 
@@ -284,12 +319,14 @@ upgrade_kernel()
 		if [ "$?" != 0 ] ; then
 			rm -f ${FILE}
 			arc_led.sh upgrade off
+			ulog "msg" "[upgrade_kernel] Partition Erase Failed"
 			return 2
 		fi
 		partition_write $PART $FILE
 		if [ "$?" != 0 ] ; then
 			rm -f ${FILE}
 			arc_led.sh upgrade off
+			ulog "msg" "[upgrade_kernel] Partition Write Failed"
 			return 2
 		fi
 		rm -f $FILE
@@ -311,12 +348,19 @@ upgrade_kernel()
 upgrade_rootfs()
 {
 	FILE=$1
+	local DEVNAME;
+
+	ulog "msg" "\n[upgrade_rootfs] Start..."
+	ulog "cmd1" "md5sum $FILE"
+	ulog "cmd1" "stat -c%s $FILE"
 
 	if [ -z "$FILE" ] || ! [ -f "$FILE" ] ; then
+		ulog "msg" "[upgrade_rootfs] filename invalid. FILE = $FILE"
 		return 1
 	fi
 
 	if [ $DUAL_IMAGE != 1 ] && [ "$2" == "2" ] ; then
+		ulog "msg" "[upgrade_rootfs] Image ID invalid. DUAL_IMAGE = $DUAL_IMAGE. ImageID = $2. Return 2"
 		return 2
 	fi
 
@@ -329,7 +373,8 @@ upgrade_rootfs()
 	image_type "$FILE" rootfs
 	if [ $? -ne 0 ] ; then
 		rm -f $FILE
-		echo wrong rootfs image
+		echo Wrong rootfs image
+		ulog "msg" "[upgrade_rootfs] Invalid rootfs image"
 		return 3
 	fi
 
@@ -354,21 +399,29 @@ upgrade_rootfs()
 			remove_backup_rootfs
 		fi
 		arc_led.sh upgrade off
-		return 2
+		ulog "msg" "[upgrade_rootfs] Partition Erase Failed"
+		return 4
 	fi
 
 	if [ $BOOT_FROM_NAND == 1 ] ; then
+		DEVNAME=`grep -w \"$PART\" /proc/mtd | awk 'BEGIN { FS=":" } { print $1 }'`
 		FILESIZE=`ls -l $FILE | awk '{ print $5 }'`
 		let FILESIZE=$FILESIZE-64
-		tail -c $FILESIZE $FILE > ${FILE}.tmp
+
+		ulog "msg" "\n[upgrade_rootfs] Memory Info before Flashing rootfs"
+		ulog "cmd1" "free"
+		ulog "msg" "\n[upgrade_rootfs] nandwrite Output during flashing rootfs"
+
+		ulog "cmd2" "tail -c $FILESIZE $FILE | nandwrite -m /dev/$DEVNAME -"
+		
+		ulog "msg" "\n[upgrade_rootfs] Kernel dmesg during FW Upgrade"
+		ulog "cmd1" "dmesg -s 65535"
+
 		rm -f $FILE
-		partition_write $PART ${FILE}.tmp
 		if [ "$?" != 0 ] ; then
-			rm -f ${FILE}.tmp
 			arc_led.sh upgrade off
-			return 2
+			return 5
 		fi
-		rm -f ${FILE}.tmp
 	else
 		upgrade $FILE $PART 0 1
 	fi
@@ -497,10 +550,13 @@ upgrade_fullimage_nor_or_nand()
 {
 	FILE=$1
 
+	ulog "cmd1" "md5sum $FILE"
+
 	image_type "$FILE" full
 	if [ $? -ne 0 ] ; then
 		rm -f $FILE
 		echo wrong full image
+		ulog "msg" "[upgrade_fullimage_nor_or_nand] Invalid full image."
 		return 3
 	fi
 
@@ -545,6 +601,7 @@ upgrade_fullimage_nor_or_nand()
 		rm -f "$KERNEL_FILE"
 		rm -f "$ROOTFS_FILE"
 		echo wrong full image
+		ulog "msg" "[upgrade_fullimage_nor_or_nand] No rootfs or kernel image existed."
 		return 3
 	fi
 
@@ -555,6 +612,7 @@ upgrade_fullimage_nor_or_nand()
 		rm -f "$KERNEL_FILE"
 		rm -f "$ROOTFS_FILE"
 		echo system memory error
+		ulog "msg" "[upgrade_fullimage_nor_or_nand] Filesize mismatch on rootfs or kernel images."
 		return 5
 	fi
 
@@ -566,6 +624,7 @@ upgrade_fullimage_nor_or_nand()
 		if [ "$RET" != 0 ] ; then
 			rm -f "$KERNEL_FILE"
 			rm -f "$ROOTFS_FILE"
+			ulog "msg" "[upgrade_fullimage_nor_or_nand] Upgrade kernel image failed. RET = $RET"
 			return $RET
 		fi
 		upgrade_rootfs "$ROOTFS_FILE" 1
@@ -576,6 +635,7 @@ upgrade_fullimage_nor_or_nand()
 		if [ "$RET" != 0 ] ; then
 			rm -f "$KERNEL_FILE"
 			rm -f "$ROOTFS_FILE"
+			ulog "msg" "[upgrade_fullimage_nor_or_nand] Upgrade kernel2 image failed. RET = $RET"
 			return $RET
 		fi
 		upgrade_rootfs "$ROOTFS_FILE" 2
@@ -587,6 +647,7 @@ upgrade_fullimage_nor_or_nand()
 
 	REBOOT=$OLD
 
+	ulog "msg" "[upgrade_fullimage_nor_or_nand] Firmware upgrade finished. RET = $RET"
 	return $RET
 }
 
@@ -602,8 +663,12 @@ upgrade_fullimage()
 		return 2
 	fi
 
+	ulog "msg" "Upgrade Firmware from `uboot_env --get --name sw_version` on `date`" 1
 	upgrade_fullimage_nor_or_nand "$1" $2
 	# upgrade_fullimage_legacy "$1" $2
+	
+	# For saving the ulog to flash
+	commitcfg > /dev/null
 
 	return $?
 }

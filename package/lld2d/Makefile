@@ -34,15 +34,17 @@ endef
 define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR) \
 		CC="$(TARGET_CC)" \
-		CFLAGS="-O3 -pipe -mips32 -mtune=mips32 -Wall -Wno-unused -s -g -fpack-struct -Wpadded" \
+		CFLAGS="-pipe -mips32 -mtune=mips32 -Wall -Wno-unused -s -g" \
 		LDFLAGS="$(TARGET_LDFLAGS)"
 endef
 
 define Package/lld2d/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_DIR) $(1)/usr/sbin
+	$(INSTALL_DIR) $(1)/etc
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/lld2d $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/lld2d.init $(1)/etc/init.d/lld2d
+	$(INSTALL_BIN) ./files/icon.ico $(1)/etc/
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))

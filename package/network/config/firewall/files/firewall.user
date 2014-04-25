@@ -134,7 +134,7 @@ echo 'add - - - - 6 - - - 8080 - - - -' > ${PPA_FILTER_PROC}
 WANIF=`wandataif.sh`
 $IPT -I OUTPUT -o ${WANIF:0:3}+ -p udp --dport 80 -j DROP
 $IPT -I OUTPUT -o ${WANIF:0:3}+ -d 239.255.255.250 -p udp --dport 1900 -j DROP
-$IPT -I OUTPUT -o ${WANIF:0:3}+ -p udp --dport 137:138 -j DROP
+#$IPT -I OUTPUT -o ${WANIF:0:3}+ -p udp --dport 137:138 -j DROP
 #use sip alg instead
 #$IPT -I INPUT -p udp --dport 5002:5022 -j ACCEPT
 

@@ -34,6 +34,15 @@ addif() {
 		1|on|enabled) setup_interface "$INTERFACE";;
 	esac
 
+	### update 802.1p mapping of WAN interfaces
+	echo $INTERFACE | grep -q "\."
+	if [ "$?" = "0" ]; then
+		sect_name=`/usr/sbin/if2sect.sh $INTERFACE`
+		if [ ${sect_name:0:3} = "wan" ]; then
+			/usr/sbin/qos/qos_set_interface_1p_map.sh $INTERFACE
+		fi
+	fi
+
 	# find all vlan configurations for this interface and set them up as well
 	for ifc in $interfaces; do
 		config_get iftype "$ifc" type

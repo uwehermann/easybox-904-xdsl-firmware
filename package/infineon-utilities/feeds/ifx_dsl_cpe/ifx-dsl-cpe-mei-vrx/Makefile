@@ -6,12 +6,18 @@
 #
 
 include $(TOPDIR)/rules.mk
+include $(TOPDIR)/.config
 include $(INCLUDE_DIR)/kernel.mk
 # re-define PATCH_DIR because kernel.mk will set it to kernel patches
 PATCH_DIR:=./patches
 
 PKG_NAME:=ifx-dsl-cpe-mei-vrx
+ifdef CONFIG_FW_ARC_CO_COMPATIBLE_SUPPORT
 PKG_VERSION:=1.2.0
+else
+#PKG_VERSION:=1.2.0
+PKG_VERSION:=1.2.1
+endif
 PKG_BASE_NAME:=drv_mei_cpe
 PKG_SOURCE:=$(PKG_BASE_NAME)-$(PKG_VERSION).tar.gz
 PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(PKG_BASE_NAME)-$(PKG_VERSION)
@@ -19,6 +25,9 @@ PKG_RELEASE:=1
 PKG_SOURCE_URL:=http://localhost
 #PKG_MD5SUM:=
 PKG_BUILD_DEPENDS:=ifx-os
+
+OPKG_EXTRA_FLAG=--force-downgrade
+
 LANTIQ_BIN_DIR=opt/lantiq/bin
 FW_DIR=/lib/firmware/$(LINUX_VERSION)
 # IFX_DSL_MAX_DEVICE=$(strip $(subst ",, $(CONFIG_IFX_DSL_MAX_DEVICE)))

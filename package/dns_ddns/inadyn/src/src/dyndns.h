@@ -35,6 +35,7 @@ typedef enum
     DYNDNS_STATIC,
     DYNDNS_CUSTOM,
     DYNDNS_DEFAULT,
+    TZO_DEFAULT, 
     FREEDNS_AFRAID_ORG_DEFAULT,
 	ZONE_EDIT_DEFAULT,
 	CUSTOM_HTTP_BASIC_AUTH,
@@ -74,6 +75,16 @@ typedef enum
 /* Conversation with the IP server */
 #define DYNDNS_GET_MY_IP_HTTP_REQUEST  \
 	"GET http://%s:%d%s HTTP/1.0\r\n\r\n"
+	
+//Added by Fallen, selfhost supporting
+#define SELFHOST_GET_MY_IP_HTTP_REQUEST_FORMAT \
+	"GET http://%s:%d%s" \
+	"username=%s&" \
+	"password=%s&" \
+	"hostname=1 " \
+	"HTTP/1.0\r\n" \
+	"Host: %s\r\n" \
+	"User-Agent: "DYNDNS_AGENT_NAME " " DYNDNS_EMAIL_ADDR"\r\n\r\n"
 
 /* dyndns.org specific update address format */	
 #define DYNDNS_GET_MY_IP_HTTP_REQUEST_FORMAT \
@@ -89,7 +100,20 @@ typedef enum
 	"Host: %s\r\n" \
 	"Authorization: Basic %s\r\n" \
 	"User-Agent: "DYNDNS_AGENT_NAME " " DYNDNS_EMAIL_ADDR"\r\n\r\n"
-    
+
+//Added by Fallen, TZO supporting
+#define TZO_GET_MY_IP_HTTP_REQUEST_FORMAT \
+	"GET http://%s:%d%s" \
+	"tzoname=%s&" \
+	"email=%s&" \
+	"tzokey=%s&" \
+	"ipaddress=%s&" \
+	"system=tzodns&" \
+	"info=1 " \
+	"HTTP/1.0\r\n" \
+	"Host: %s\r\n" \
+	"User-Agent: "DYNDNS_AGENT_NAME " " DYNDNS_EMAIL_ADDR"\r\n\r\n"
+   
 /*freedns.afraid.org specific update request format */    
 #define FREEDNS_UPDATE_MY_IP_REQUEST_FORMAT \
     "GET http://%s:%d%s" \
@@ -122,6 +146,8 @@ typedef enum
 
 #define DYNDNS_OK_RESPONSE	"good"
 #define DYNDNS_OK_NOCHANGE	"nochg"
+#define TZO_OK_RESPONSE		"update successful"
+#define TZO_OK_NOCHANGE		"no update"
 
 
 /* SOME DEFAULT CONFIGURATIONS */

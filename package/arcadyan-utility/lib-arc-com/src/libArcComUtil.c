@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "libArcComApi.h"
 
 /*******************************************************************************
@@ -656,6 +658,37 @@ long utilIpIsZero(unsigned char* byIp)
 
 /*******************************************************************************
  * Description
+ *		Check if a String is a IP address
+ *
+ * Parameters
+ *		ipS:	String
+ *
+ * Returns
+ *		* ARC_COM_TRUE(1):		a zero address
+ *		* ARC_COM_FALSE(0):		not a zero address
+ *		* ARC_COM_ERROR(-1):	byIp is null
+ *
+ * Note
+ *		* IP address is composed of 4 bytes unsigned character
+ *
+ ******************************************************************************/
+long utilStrIsIp(unsigned char* ipS)
+{
+	int idx=0;
+	int sz_str;
+
+	if (ipS == ARC_COM_NULL)
+		return ARC_COM_ERROR;
+	sz_str = strlen(ipS);
+	for(idx=0; idx<sz_str; idx++){
+		if((ipS[idx] != '.')&&((ipS[idx] > '9')||(ipS[idx] < '0')))
+			return ARC_COM_FALSE;
+	}
+	return ARC_COM_TRUE;
+}
+
+/*******************************************************************************
+ * Description
  *		Convert IP address to an ascii string
  *
  * Parameters
@@ -1058,17 +1091,130 @@ int utilParseArgs (char* sArgStr, char* sDelimiters, int iArgc, char** pArgv)
 int utilGetlockByName(char* filename, int *fd, int type)
 {
 	int ret = ARC_COM_OK;
-	int trial;
+	//int trial;
 	char tmpBuf[255];
+	char cmd[70];
+	char fn[50];
+	if(filename){
+		strncpy(fn, filename, 50);
+	}else{
+		strncpy(fn, "/var/lock/iptables.lock", 50);
+	}
 
 	if(type == UTIL_FILE_LCK){
 //		printf("--------->[%s]%d start\n", __FUNCTION__, __LINE__);
-		osSystem_GetOutput("lock /var/lock/iptables.lock", tmpBuf, sizeof(tmpBuf));
+		sprintf(cmd, "lock %s", fn);
+		osSystem_GetOutput(cmd, tmpBuf, sizeof(tmpBuf));
 
 	}else{
 //		printf("--------->[%s]%d end\n", __FUNCTION__, __LINE__);
-		osSystem_GetOutput("lock -u /var/lock/iptables.lock", tmpBuf, sizeof(tmpBuf));
+		sprintf(cmd, "lock -u %s", fn);
+		osSystem_GetOutput(cmd, tmpBuf, sizeof(tmpBuf));
 	}
 
     return ret;
 }
+/*******************************************************************************
+ * Description
+ *		Send an E-mail to the account
+ *
+ * Parameters
+ *		toAccount:	char* the target mail address (null to default account)
+ *		subject:	char* mail subject
+ *		context:	char* body of the mail
+ *
+ * Returns
+ *		* ARC_COM_OK(0):		successfully
+ *		* ARC_COM_ERROR(-1):	byIp is null
+ *
+ * Note
+ *
+ ******************************************************************************/
+long utilSendMailByProfileID(int id, char* toAccount, char* subject, char* context)
+{
+	char tmpS[255], qStr[255], account[50];
+	char sTmpFn[] = "/tmp/mail.txt";
+	char sSSMTPCONFFn[30];
+	char sSSMTPCONFFnDEF[] = "/etc/config/ssmtp/ssmtp.conf";
+	FILE*	pFile;
+	long ret = ARC_COM_OK;
+	struct stat			stFileStat;
+
+
+//	sprintf(qStr,"ccfg_cli showcfg | grep Mail_func | cut -d= -f 1");
+//	osSystem_GetOutput(qStr,tmpS,sizeof(tmpS));
+//	if(strcmp(tmpS, "1") != 0)
+//		return ARC_COM_ERROR;
+	if(id > -1)
+		sprintf(sSSMTPCONFFn, "%s_%d", sSSMTPCONFFnDEF, id);
+	else
+		strcpy(sSSMTPCONFFn, sSSMTPCONFFnDEF);
+
+	if ( (pFile=fopen(sTmpFn,"w")) == 0 )
+		return ARC_COM_ERROR;
+
+	if (pFile) {
+		//fprintf(pFile, "Date: todays-date\n");
+		if((toAccount == NULL)||(strlen(toAccount)==0)){
+			if ( stat(sSSMTPCONFFn, &stFileStat) >= 0 ){
+				sprintf(qStr,"cat %s | grep ^Root= | cut -d \"=\" -f 2", sSSMTPCONFFn);
+				osSystem_GetOutput(qStr,account,sizeof(account));
+			}else{
+				ret = ARC_COM_ERROR;
+				account[0] = '\0';
+			}
+			fprintf(pFile, "To: %s\n", account);
+		}else{
+			fprintf(pFile, "To: %s\n", toAccount);
+		}
+		if(subject == NULL)
+			fprintf(pFile, "Subject: no Subject\n");
+		else
+			fprintf(pFile, "Subject: %s\n", subject);
+
+		//fprintf(pFile, "from: your-name@domain.com\n", from);
+		if(context  == NULL)
+			fprintf(pFile, "\n\nempty body\n");
+		else
+			fprintf(pFile, "\n\n%s\n", context);
+
+		fclose(pFile);
+
+		if(ret == ARC_COM_OK){
+//			if(id > -1){
+//				//swap profile
+//				sprintf(qStr,"mv %s %s.bak", sSSMTPCONFFnDEF, sSSMTPCONFFnDEF);
+//				osSystem_GetOutput(qStr,tmpS,sizeof(tmpS));
+//				sprintf(qStr,"cp %s %s", sSSMTPCONFFn, sSSMTPCONFFnDEF);
+//				osSystem_GetOutput(qStr,tmpS,sizeof(tmpS));
+//			}
+			sprintf(qStr,"cat %s | grep ^AuthUser= | cut -d \"=\" -f 2", sSSMTPCONFFn);
+			osSystem_GetOutput(qStr,tmpS,sizeof(tmpS));
+			if(strlen(tmpS) > 0) //remove \n from the end of data
+				tmpS[strlen(tmpS)-1] = '\0';
+//			memset(username, '\0', sizeof(username));
+//			strncpy(username, tmpS, strlen(tmpS)-1);
+
+			sprintf(qStr,"sendmail -C %s -F %s -t < %s", sSSMTPCONFFn, tmpS, sTmpFn);
+			osSystem_GetOutput(qStr,tmpS,sizeof(tmpS));
+
+//			if(id > -1){
+//				//swap profile
+//				sprintf(qStr,"mv %s.bak %s", sSSMTPCONFFnDEF, sSSMTPCONFFnDEF);
+//				osSystem_GetOutput(qStr,tmpS,sizeof(tmpS));
+//			}
+		}
+	}else{
+		printf("[%s]%d\n", __FUNCTION__, __LINE__);
+		ret = ARC_COM_ERROR;
+		printf("Open the file:%s error\n", sTmpFn);
+	}
+	return ret;
+
+
+}
+
+long utilSendMail(char* toAccount, char* subject, char* context){
+	return utilSendMailByProfileID(-1, toAccount, subject, context);
+}
+

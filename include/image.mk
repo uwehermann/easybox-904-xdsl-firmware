@@ -189,6 +189,14 @@ else
 #	@cp $(TOPDIR)/target/linux/$(BOARD)/image/vf904Cert.pem  $(TARGET_DIR)/usr/sbin
 #  endef
 
+#  define Image/mkfs/prepare/arcfwversion
+#	if [ "x${CONFIG_UBOOT_CONFIG_SW_VERSION}" = "x" ]; then \
+#		sed -i 's/export CONFIG_UBOOT_CONFIG_SW_VERSION.*/export CONFIG_UBOOT_CONFIG_SW_VERSION="Rev-$(shell date +%Y%m%d-%H%M%S)"/g' $(TARGET_DIR)/etc/config.sh; \
+#	else \
+#		sed -i 's/export CONFIG_UBOOT_CONFIG_SW_VERSION.*/export CONFIG_UBOOT_CONFIG_SW_VERSION=${CONFIG_UBOOT_CONFIG_SW_VERSION}/g' $(TARGET_DIR)/etc/config.sh; \
+#	fi
+#  endef
+
   define Image/mkfs/fullimage
 		$$(call Image/Build,fullimage)
 		rm -f $(TARGET_IMG_DIR)/root.squash
@@ -235,6 +243,7 @@ define Image/mkfs/prepare/arcadyan
 	$(call Image/mkfs/prepare/arcmid)
 	$(call Image/mkfs/prepare/arcsymlink)
 #	$(call Image/mkfs/prepare/arccert)
+	$(call Image/mkfs/prepare/arcfwversion)
 endef
 
 define Image/mkfs/prepare/default

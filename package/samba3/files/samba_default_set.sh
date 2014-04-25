@@ -102,7 +102,7 @@ if [ "${CHECK}" == "0" ]; then
 		ccfg_cli set smb${MIN_SEQ_ID}_drive@samba="1:1:${MAX_SEQ}:${VENDOR}:${MODEL}:"
 		ccfg_cli set smb${MIN_SEQ_ID}_folder0@samba="1:${VENDOR}:1:/:0:::${PARTITION}"
 
-		ccfg_cli set smb_account${MIN_SEQ_ID}@samba="0:0:user:user:Partition:${VENDOR}:${MODEL}:|||||||:|||||||:0:${DEV}:0:1:SN"		
+		ccfg_cli set smb_account${MIN_SEQ_ID}@samba="0:0:#:#:Partition:${VENDOR}:${MODEL}:|||||||:|||||||:0:${DEV}:0:1:SN"		
 
 		if [ "${MOUNT_NUM}" -ge "2" ]; then
 			ccfg_cli set smb${MIN_SEQ_ID}_folder1@samba="1:${VENDOR}_1:2:/:2:::${PARTITION2}"
@@ -117,7 +117,7 @@ if [ "${CHECK}" == "0" ]; then
 		ccfg_cli set smb${VALID_ID}_drive@samba="1:1:${MAX_SEQ}:${VENDOR}:${MODEL}:"
 		ccfg_cli set smb${VALID_ID}_folder0@samba="1:${VENDOR}:1:/:0:::${PARTITION}"
 
-		ccfg_cli set smb_account${VALID_ID}@samba="0:0:user:user:Partition:${VENDOR}:${MODEL}:|||||||:|||||||:0:${DEV}:0:1:SN"
+		ccfg_cli set smb_account${VALID_ID}@samba="0:0:#:#:Partition:${VENDOR}:${MODEL}:|||||||:|||||||:0:${DEV}:0:1:SN"
 
 		if [ "${MOUNT_NUM}" -ge "2" ]; then
 			ccfg_cli set smb${VALID_ID}_folder1@samba="1:${VENDOR}_1:2:/:2:::${PARTITION2}"

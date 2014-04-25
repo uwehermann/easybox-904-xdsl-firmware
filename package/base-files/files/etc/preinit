@@ -77,7 +77,13 @@ pi_failsafe_net_message=false
 	###
 MTD_PARTS_BUILT="`/bin/grep CONFIG_UBOOT_CONFIG_MTDPARTS /etc/config.sh 2>&- | /usr/bin/cut -d '=' -f 2 | /usr/bin/cut -d '"' -f 2`"
 MTD_PARTS_UBOOT="`/usr/sbin/uboot_env --get --name mtdparts 2>&-`"
-if [ "$MTD_PARTS_UBOOT" != "$MTD_PARTS_BUILT" ] ; then
+if [ -z $MTD_PARTS_BUILT ]; then
+	current_image=`/usr/sbin/uboot_env --get --name bootid`
+	[[ $current_image -eq 2 ]] && new_image= || new_image=2
+	/bin/echo "Firmware Image ${current_image:-1} might be corrupted. Switch to Image ${new_image:-1} and reboot." > /dev/console
+	/usr/sbin/uboot_env --set --name bootid --value "${new_image}"
+	/sbin/reboot -f
+elif [ "$MTD_PARTS_UBOOT" != "$MTD_PARTS_BUILT" ] ; then
 	/usr/sbin/uboot_env --set --name mtdparts --value "$MTD_PARTS_BUILT" > /dev/console
 	/bin/echo "mtdparts in config.sh --> $MTD_PARTS_BUILT" > /dev/console
 	/bin/echo "mtdparts in uboot     --> $MTD_PARTS_UBOOT" > /dev/console

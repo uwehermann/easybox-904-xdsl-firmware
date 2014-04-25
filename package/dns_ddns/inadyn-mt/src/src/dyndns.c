@@ -1585,7 +1585,8 @@ static RC_TYPE do_update_alias_table(DYN_DNS_CLIENT *p_self,char *is_forced_upda
 					{
 
 						SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, "DDNS: Updating...\n");
-
+						system("echo 1 > /tmp/ddns_status.log");
+						
 						HTTP_TRANSACTION http_tr;
 						http_tr.req_len = p_self->info.p_dns_system->p_dns_update_req_func(
 							                  (struct _DYN_DNS_CLIENT*) p_self,i,
@@ -1645,7 +1646,8 @@ static RC_TYPE do_update_alias_table(DYN_DNS_CLIENT *p_self,char *is_forced_upda
 								SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, "DDNS: Domain name '%s' to IP '%s' updated successfully.\n",
 											p_self->alias_info.names[i].name,
 											p_self->info.my_ip_address.name[ip_store]);
-
+								system("echo 0 > /tmp/ddns_status.log");
+								
 								if (p_self->external_command)
 
 									os_shell_execute(p_self->external_command);
@@ -1660,12 +1662,14 @@ static RC_TYPE do_update_alias_table(DYN_DNS_CLIENT *p_self,char *is_forced_upda
 
 									SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, "DDNS: Error updating domain name %s\n",
 											p_self->alias_info.names[i].name);
+									system("echo 1 > /tmp/ddns_status.log");
 								}
 								else {
 
 									DBG_PRINTF((LOG_WARNING,"W:" MODULE_TAG "Error validating DYNDNS svr answer. Check usr,pass,hostname!\n"));
 									SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, "DDNS: Update error. Check account, password, and domain name\n");
-
+									system("echo 1 > /tmp/ddns_status.log");
+											
 									p_self->alias_info.fatal_error[i]=TRUE;
 
 									DBG_PRINTF((LOG_CRIT,"C:" MODULE_TAG "\n"\
@@ -2332,7 +2336,8 @@ RC_TYPE dyn_dns_update_ip(DYN_DNS_CLIENT *p_self)
 
 				DBG_PRINTF((LOG_WARNING,"W:DYNDNS: Failed checking current ip...\n"));
 				SetDDNSSystemLog(LOG_LEVEL_INFO_STR, LOG_MESSAGE_TYPE_WAN_STR, "DDNS: Failed checking current ip...\n");
-
+				system("echo 1 > /tmp/ddns_status.log");
+				
 				if (p_self->net_retries<ip_attempts++) {
 
 					is_update_pending=true;

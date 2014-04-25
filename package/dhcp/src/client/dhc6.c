@@ -2871,12 +2871,13 @@ dhc6_check_advertise(struct dhc6_lease *lease)
 			{
 				scope = "IAPREFIX";
 				/* DHCPv6 connection error of TOCPE0051(3.2.3) */
-				if(addr->plen != 56)
+/*				if(addr->plen != 56)
 				{
 					log_debug("dhc6_check_advertise: It is a invalid pfxlen[%d] for DT.", addr->plen);
+					arcprintf("%s dhc6_check_advertise: It is a invalid pfxlen[%d] for DT.%s\n", ARC_CLR_TR, addr->plen, ARC_CLR_RESET);
 					osSystem("umng_syslog_cli addErrorCode -1 P006 \"Prefix length != 56.\"");
 					return ISC_R_ADDRNOTAVAIL;
-				}
+				}*/
 			}
 			rval = dhc6_check_status(rval, addr->options,
 						 scope, &code);

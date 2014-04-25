@@ -291,10 +291,12 @@ calc_xtse() {
   echo "[ifx_cpe_control_init.sh] select_adsl_mode=$select_adsl_mode" >> /dev/console
   if [ $select_adsl_mode -eq 1 ]; then
 	#if [ $CONFIG_FW_XDSL_ANNEX_B_1 -eq 1 ]; then
-		ADSL_MODE="Annex_1_0_1_1_0_1_0_0_0_0_1_1_1_0_0"
+		#ADSL_MODE="Annex_1_0_1_1_0_1_0_0_0_0_1_1_1_0_0"
+		ADSL_MODE="AnnexB_0_0_0_0_0_0_0_0_0_0_1_0_1_0_0"
 		echo "[ifx_cpe_control_init.sh calc_xtse] CONFIG_FW_XDSL_ANNEX_B_* is on" > /dev/console
 		if [ $CONFIG_FW_XDSL_ANNEX_J -eq 1 ]; then
-			ADSL_MODE="Annex_1_0_1_1_0_1_0_0_0_0_1_1_1_1_1"
+			#ADSL_MODE="Annex_1_0_1_1_0_1_0_0_0_0_1_1_1_1_1"
+			ADSL_MODE="AnnexB_0_0_0_0_0_0_0_0_0_0_1_0_1_0_1"
 			echo "[ifx_cpe_control_init.sh calc_xtse] CONFIG_FW_XDSL_ANNEX_J is on" > /dev/console
 		fi
 	else
@@ -411,7 +413,12 @@ export_dsl_scr()
 	echo 												>> ${ADSL_SCR}
 	echo '[WaitForConfiguration]={'						>> ${ADSL_SCR}
 #	echo 'g997xtusecs ' `echo ${xTSE} | sed 's/_/ /g'`	>> ${ADSL_SCR}
+####	if [ "$xDSL_Mgmt_Mode" == "Auto" ] ; then
+####		echo 'mfcs 2 0'									>> ${ADSL_SCR}
+####	fi
 		echo 'llcs 0 1 0x1 0x1 0x1 0x1e116000 5'									>> ${ADSL_SCR}
+		echo 'dms 0x0048 0x0000 0x0001 0002'									>> ${ADSL_SCR}
+		echo 'dms 0x0248 0x0000 0x0001 0002'									>> ${ADSL_SCR}
 	echo '}'											>> ${ADSL_SCR}
 	echo 												>> ${ADSL_SCR}
 	echo '[WaitForLinkActivate]={'						>> ${ADSL_SCR}
@@ -431,6 +438,9 @@ export_dsl_scr()
 	echo 												>> ${VDSL_SCR}
 	echo '[WaitForConfiguration]={'						>> ${VDSL_SCR}
 #	echo 'g997xtusecs ' `echo ${xTSE} | sed 's/_/ /g'`	>> ${VDSL_SCR}
+####	if [ "$xDSL_Mgmt_Mode" == "Auto" ] ; then
+####		echo 'mfcs 1 1'								>> ${VDSL_SCR}
+####	fi
 	echo 'llcs 0 1 0x1 0x1 0x1 0x1e116000 5'											>> ${VDSL_SCR}
 	echo '}'											>> ${VDSL_SCR}
 	echo 												>> ${VDSL_SCR}
@@ -453,7 +463,7 @@ set_inventory_information()
 {
 		ARC_PRODUCT_ADSL_VERSION=`ls /firmware/dsl_vr9_firmware_xdsl-*.bin`
 		ARC_PRODUCT_ADSL_VERSION=${ARC_PRODUCT_ADSL_VERSION#*-}
-		ARC_PRODUCT_ADSL_VERSION=${ARC_PRODUCT_ADSL_VERSION#*_}
+		#ARC_PRODUCT_ADSL_VERSION=${ARC_PRODUCT_ADSL_VERSION#*_}
 		ARC_PRODUCT_ADSL_VERSION=${ARC_PRODUCT_ADSL_VERSION%%.bin*}
 		ARC_PRODUCT_VENDOR_ID=${CONFIG_ARC_PRODUCT_VENDOR_ID#*x}
 		arVenId1=${ARC_PRODUCT_VENDOR_ID%%" "*}
@@ -474,15 +484,39 @@ set_inventory_information()
  			fi
 		done
 
-		for i in $(seq 1 16)
+		#for i in $(seq 1 16)
+		#do
+ 		#	if [ $i -le ${#ARC_PRODUCT_ADSL_VERSION} ];
+ 		#	then
+     		#eval arAdslVer$i="`echo $ARC_PRODUCT_ADSL_VERSION | cut -c $i-$i | od -A n -t x1 | cut -d" " -f2`"
+ 		#	else
+     		#eval arAdslVer$i=0;
+ 		#	fi
+		#done
+		
+		for i in $(seq 1 6)
 		do
+		  j=`expr $i \* 3 - 1`
  			if [ $i -le ${#ARC_PRODUCT_ADSL_VERSION} ];
  			then
-     		eval arAdslVer$i="`echo $ARC_PRODUCT_ADSL_VERSION | cut -c $i-$i | od -A n -t x1 | cut -d" " -f2`"
+     		eval arAdslVer$i="`echo $ARC_PRODUCT_ADSL_VERSION | cut -c $j-$j | od -A n -t x1 | cut -d' ' -f2`"
  			else
      		eval arAdslVer$i=0;
  			fi
 		done
+
+		arAdslVer7="`echo "-" | od -A n -t x1 | cut -d" " -f2`"
+
+		for i in $(seq 8 16)
+		do
+		  j=`expr $i \* 3 - 4`
+ 			if [ $j -le ${#ARC_PRODUCT_ADSL_VERSION} ];
+ 			then
+     		eval arAdslVer$i="`echo $ARC_PRODUCT_ADSL_VERSION | cut -c $j-$j | od -A n -t x1 | cut -d' ' -f2`"
+ 			else
+     		eval arAdslVer$i=0;
+ 			fi
+		done		
 
 		for i in $(seq 1 32)
 		do
@@ -518,7 +552,10 @@ set_inventory_information()
 
 start()
 {
-
+	### disable EthWan Gphy to avoid Ethernet signals couple into the DSL.
+	### if dsl is not connected, autowandetect will enable Gphy and mac later.
+	/usr/sbin/setup_netdev.sh wan-mac-disable
+	/usr/sbin/setup_netdev.sh wan-phy-disable
 	### ctc ###
 	if [ `/bin/grep -c -i voip /proc/cmdline` -ge 1 ] && ! [ -f /tmp/dect_demo_test ] ; then
 		return
@@ -549,6 +586,7 @@ start()
    RETX_ENA=0
    CNTL_MODE_ENA=0
    CNTL_MODE=0
+   MFCS_SETTING=2
 
    # detect_wan@system => 0: orginal behavior(non auto-sensing); 1: auto-sensing
    detect_wan=`ccfg_cli get detect_wan@system`
@@ -576,6 +614,7 @@ start()
 		elif [ "`ccfg_cli get wan_type@system`" == "1" ] ; then # ADSL-mode
 			echo "[ifx_cpe_control_init.sh] cp $DEFAULT_AUTO_ADSL_RC_CONF $XDSL_RC_CONF" > /dev/console
 			cp $DEFAULT_AUTO_ADSL_RC_CONF $XDSL_RC_CONF
+			MFCS_SETTING=1
 		elif [ "`ccfg_cli get wan_type@system`" == "3" ] ; then # VDSL-mode
 			echo "[ifx_cpe_control_init.sh] cp $DEFAULT_AUTO_VDSL_RC_CONF $XDSL_RC_CONF" > /dev/console
 			cp $DEFAULT_AUTO_VDSL_RC_CONF $XDSL_RC_CONF
@@ -589,6 +628,7 @@ start()
 			cp $DEFAULT_AUTO_VDSL_RC_CONF $XDSL_RC_CONF
 		elif [ "`ccfg_cli get wan_type@system`" == "1" ] ; then # ADSL-mode
 			echo "[ifx_cpe_control_init.sh] cp $DEFAULT_ADSL_RC_CONF $XDSL_RC_CONF" > /dev/console
+			MFCS_SETTING=1
 			cp $DEFAULT_ADSL_RC_CONF $XDSL_RC_CONF
 		elif [ "`ccfg_cli get wan_type@system`" == "3" ] ; then # VDSL-mode
 			echo "[ifx_cpe_control_init.sh] cp $DEFAULT_VDSL_RC_CONF $XDSL_RC_CONF" > /dev/console
@@ -726,17 +766,17 @@ start()
          fi
       fi
 
-		if [ "$detect_wan" == "0" ] ; then
-		### ctc ###
-			if [ "`umngcli get active_wan_type@system`" == "3" ] ; then # VDSL-learned so preferred
-#           	XDSL_MULTIMODE="-M1_1"
-				XDSL_MULTIMODE="-M2_0"
-			else # ADSL-learned so preferred
-#           	XDSL_MULTIMODE="-M2_0"
-				XDSL_MULTIMODE="-M1_1"
-			fi
-		###########
-		fi
+####		if [ "$detect_wan" == "0" ] ; then
+####		### ctc ###
+####			if [ "`umngcli get active_wan_type@system`" == "3" ] ; then # VDSL-learned so preferred
+#####           	XDSL_MULTIMODE="-M1_1"
+####				XDSL_MULTIMODE="-M2_0"
+####			else # ADSL-learned so preferred
+#####           	XDSL_MULTIMODE="-M2_0"
+####				XDSL_MULTIMODE="-M1_1"
+####			fi
+####		###########
+####		fi
 
 	echo "[ifx_cpe_control_init.sh] XDSL_MULTIMODE=$XDSL_MULTIMODE, XTM_MULTIMODE=$XTM_MULTIMODE" > /dev/console
 
@@ -762,10 +802,17 @@ start()
 echo "[ifx_cpe_control_init.sh] ADSL_MODE=$ADSL_MODE" >> $OUT_FILE
 echo "[ifx_cpe_control_init.sh] ${BIN_DIR}/dsl_cpe_control -i${xTSE} -f ${FW_DIR}/${FW_FILENAME} ${XDSL_MULTIMODE} ${XTM_MULTIMODE} ${AUTOBOOT_VDSL} ${AUTOBOOT_ADSL} ${NOTIFICATION_SCRIPT} ${TCPM_IF} ${DTI_IF}" >> $OUT_FILE
 
+         annexJ_relay="`ccfg_cli get annexJ@dsl`"
+         if [ "$MFCS_SETTING" == "1" ] && [ "$annexJ_relay" == "1" ] ; then
+                echo mask_set 0x20 0x20 > /proc/driver/sipo  #enable annex J relay
+		echo "[ifx_cpe_control_init.sh] enable annexJ relay, /proc/driver/sipo should be 0x20" > /dev/console
+	 fi
+
          # start DSL CPE Control Application in the background
          ${BIN_DIR}/dsl_cpe_control -i${xTSE} -f ${FW_DIR}/${FW_FILENAME} \
             ${XDSL_MULTIMODE} ${XTM_MULTIMODE} ${AUTOBOOT_VDSL} ${AUTOBOOT_ADSL} \
             ${NOTIFICATION_SCRIPT} ${TCPM_IF} ${DTI_IF} &
+         echo "ifx_cpe_control_init.sh-----${BIN_DIR}/dsl_cpe_control -i${xTSE} -f ${FW_DIR}/${FW_FILENAME} ${XDSL_MULTIMODE} ${XTM_MULTIMODE} ${AUTOBOOT_VDSL} ${AUTOBOOT_ADSL} ${NOTIFICATION_SCRIPT} ${TCPM_IF} ${DTI_IF}" > /dev/console
 
          PS=`ps`
          echo $PS | grep -q dsl_cpe_control && {
@@ -833,6 +880,13 @@ echo "[ifx_cpe_control_init.sh start] wanphy_phymode=0" >> $OUT_FILE
         # we use "acs 0" and "acs 1" commands to stop and start DSL CPE Control daemon completely.
         # Otherwise, IAD will happen PADI send out but PADO can not be received from DSL to PPE.(bitonic)
          #${BIN_DIR}/dsl_cpe_pipe.sh acs 2
+         ${BIN_DIR}/dsl_cpe_pipe.sh acs 0
+         sleep 1
+         ${BIN_DIR}/dsl_cpe_pipe.sh acs 1
+         sleep 3
+	 echo "@ MFCS_SETTING=${MFCS_SETTING}" > /dev/console
+         ${BIN_DIR}/dsl_cpe_pipe.sh mfcs ${MFCS_SETTING}
+         sleep 1
          ${BIN_DIR}/dsl_cpe_pipe.sh acs 0
          sleep 1
          ${BIN_DIR}/dsl_cpe_pipe.sh acs 1

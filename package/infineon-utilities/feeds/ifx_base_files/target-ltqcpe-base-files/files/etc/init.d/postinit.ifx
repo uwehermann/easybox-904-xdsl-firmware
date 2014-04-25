@@ -11,5 +11,10 @@ else
 fi
 
 #(/usr/sbin/setup_netdev.sh ppadev ; /usr/sbin/setup_netdev.sh switch ; /usr/sbin/setup_netdev.sh port-enable )&
-(/usr/sbin/setup_netdev.sh lan-phy-enable )&
+
+if [ -f /tmp/AutoSensingStarting ] ; then
+	echo "[postiit.ifx] AutoSensingStarting" >> /dev/console
+else
+	(/usr/sbin/setup_netdev.sh lan-phy-enable )&
+fi
 

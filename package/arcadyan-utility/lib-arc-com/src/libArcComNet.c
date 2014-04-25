@@ -16,9 +16,10 @@
 
 #include "libArcComApi.h"
 
-static unsigned char	byPppPseudoIp[4] = { 10, 64, 64, 164 };
+
+static unsigned char	byPppPseudoIp[4] = { 10, 64, 64, 64 };
 static unsigned char	byPppPseudoSubMask[4] = { 255, 255, 255, 255 };
-static unsigned char	byPppPseudoP2pIp[4] = { 10, 112, 112, 212 };
+static unsigned char	byPppPseudoP2pIp[4] = { 10, 112, 112, 112 };
 
 #pragma pack(1)
 typedef struct arp_pkt
@@ -78,6 +79,19 @@ long osIfConfigGet( char* sIfName, unsigned long lRecCnt, stOsNetIfInfo* pstBuf 
 	char*			pPtr;
 	char*			pLast;
 	stOsNetIfInfo	stIfInfo;
+	int             ppp_idx=0;
+	//this is tricky, must be sure the pseudo addresses are consistent with those used in on-demand ppp (ipcp.c, ip_demand_conf())
+    unsigned long	PppPseudoIp, PppIp;
+    unsigned long	PppPseudoSubMask, PppSubMask;
+    unsigned long	PppPseudoP2pIp, PppP2pIp;
+
+    if(lRecCnt==1){
+        return osIfConfigGet_S(sIfName, pstBuf);
+    }
+
+    utilIp2Val(byPppPseudoIp, &PppPseudoIp);
+    utilIp2Val(byPppPseudoSubMask, &PppPseudoSubMask);
+    utilIp2Val(byPppPseudoP2pIp, &PppPseudoP2pIp);
 
 	if (lRecCnt == 0)
 		pstBuf = ARC_COM_NULL;
@@ -110,10 +124,13 @@ long osIfConfigGet( char* sIfName, unsigned long lRecCnt, stOsNetIfInfo* pstBuf 
 		/**/
 		if ( strlen( sLineBuf ) == 0) /* blank line, means end of one record */
 		{
-			if ( utilIpCmp( stIfInfo.byIp, byPppPseudoIp ) != 0
-			 ||  utilIpCmp( stIfInfo.bySubMask, byPppPseudoSubMask ) != 0
-			 ||  utilIpCmp( stIfInfo.byP2pIp, byPppPseudoP2pIp ) != 0
-			 ||  strncmp( stIfInfo.sName, "ppp", 3 ) != 0 )
+			utilIp2Val(stIfInfo.byIp, &PppIp);
+			utilIp2Val(stIfInfo.bySubMask, &PppSubMask);
+			utilIp2Val(stIfInfo.byP2pIp, &PppP2pIp);
+			if ( PppP2pIp != (PppPseudoP2pIp + ppp_idx)
+			 ||  PppSubMask != PppPseudoSubMask
+			 ||  PppIp != (PppPseudoIp + ppp_idx)
+			 ||  strncmp( stIfInfo.sName, "ppp", 3 ) != 0 )	
 			{
 				if (pstBuf != ARC_COM_NULL)
 				{
@@ -124,6 +141,7 @@ long osIfConfigGet( char* sIfName, unsigned long lRecCnt, stOsNetIfInfo* pstBuf 
 				if (lCnt >= lRecCnt)
 					pstBuf = ARC_COM_NULL;
 			}
+			ppp_idx=0;
 			continue;
 		}
 		/**/
@@ -178,6 +196,13 @@ long osIfConfigGet( char* sIfName, unsigned long lRecCnt, stOsNetIfInfo* pstBuf 
 					if ( (pPtr=osStrTok_r( pLast, " ", &pLast )) == ARC_COM_NULL )
 						continue;
 					utilIpStr2Ip( pPtr, stIfInfo.byP2pIp );
+					if (stIfInfo.sName != NULL)
+#if 1 /* Terry 20121228, fix crash problem if sIfName is NULL */
+						/* TODO, Need to review the workardound */
+						ppp_idx=atoi(stIfInfo.sName+3);
+#else
+					    ppp_idx=atoi(sIfName+3);
+#endif
 				}
 				else
 				{
@@ -215,6 +240,138 @@ long osIfConfigGet( char* sIfName, unsigned long lRecCnt, stOsNetIfInfo* pstBuf 
 	return lCnt;
 }
 
+long osIfConfigGet_S( char* sIfName, stOsNetIfInfo* pstBuf )
+{
+    struct ifreq        ifr;
+    struct sockaddr_in  *sin_ptr;
+    int                 i, fd, ifup=0, is_ppp=0, ppp_idx;
+    //this is tricky, must be sure the pseudo addresses are consistent with those used in on-demand ppp
+    unsigned long       PppPseudoIp, PppIp;
+    //unsigned long       PppPseudoSubMask, PppSubMask;
+    unsigned long       PppPseudoP2pIp, PppP2pIp;
+
+    if(sIfName==NULL){
+        return ARC_COM_ERROR;
+    }
+
+    fd=socket(AF_INET,SOCK_DGRAM,0);    
+    if(fd==-1){
+        return ARC_COM_ERROR;
+    }
+
+    osBZero(pstBuf, sizeof(*pstBuf));
+    strncpy(pstBuf->sName, sIfName, 31);
+
+    osBZero(&ifr, sizeof(ifr));
+    strncpy(ifr.ifr_name, sIfName, IFNAMSIZ-1);
+
+    //FLAGs
+    if(ioctl(fd, SIOCGIFFLAGS, &ifr)==-1){
+        goto IfConfigGet_S_Error;
+    }
+//printf("ifr.ifr_flags=0x%x\n", ifr.ifr_flags);
+    if(ifr.ifr_flags&IFF_UP){
+        pstBuf->bEnabled=ARC_COM_TRUE;
+        ifup=1;
+    }
+    else{
+        pstBuf->bEnabled=ARC_COM_FALSE;
+    }
+
+    //sLinkEncap
+    if(ifr.ifr_flags&IFF_LOOPBACK){
+        strcpy(pstBuf->sLinkEncap, "Local Loopback");
+    }
+    else if(ifr.ifr_flags&IFF_POINTOPOINT){
+        strcpy(pstBuf->sLinkEncap, "Point-to-Point Protocol");
+        is_ppp=1;
+        ppp_idx=atoi(sIfName+3);
+    }
+    else if(strncmp(sIfName, "imq", 3)==0){
+        strcpy(pstBuf->sLinkEncap, "UNSPEC");
+    }
+    else{
+        strcpy(pstBuf->sLinkEncap, "Ethernet");
+    }
+ 
+    //HW addr
+    if(ioctl(fd, SIOCGIFHWADDR, &ifr)==-1){
+        goto IfConfigGet_S_Error;
+    }
+    for(i=0; i<6; i++){
+        pstBuf->byMac[i]=(unsigned char)ifr.ifr_hwaddr.sa_data[i];
+    }
+
+    if(ifup==0){
+        goto IfConfigGet_S_Return;
+    }
+
+    utilIp2Val(byPppPseudoIp, &PppPseudoIp);
+    //utilIp2Val(byPppPseudoSubMask, &PppPseudoSubMask);
+    utilIp2Val(byPppPseudoP2pIp, &PppPseudoP2pIp);
+
+    //IPv4 addr
+    ifr.ifr_addr.sa_family=AF_INET;
+    if(ioctl(fd, SIOCGIFADDR, &ifr)==-1){
+        goto IfConfigGet_S_Error;
+    }
+    sin_ptr=(struct sockaddr_in *)&ifr.ifr_addr;
+    memcpy(&(pstBuf->byIp[0]), (char *)&(sin_ptr->sin_addr), 4);
+	utilIp2Val(pstBuf->byIp, &PppIp);
+    if(is_ppp==1 && PppIp==(PppPseudoIp+ppp_idx)){
+        pstBuf->bEnabled=ARC_COM_FALSE;
+        goto IfConfigGet_S_Return;
+    }
+
+    //IPv4 netmask
+    if(ioctl(fd, SIOCGIFNETMASK, &ifr)==-1){
+        goto IfConfigGet_S_Error;
+    }
+    sin_ptr=(struct sockaddr_in *)&ifr.ifr_addr;
+    memcpy(&(pstBuf->bySubMask[0]), (char *)&(sin_ptr->sin_addr), 4);
+//printf("bySubMask=%d.%d.%d.%d\n", pstBuf->bySubMask[0], pstBuf->bySubMask[1], pstBuf->bySubMask[2], pstBuf->bySubMask[3]);
+
+    //PPP peer addr
+    if(is_ppp==1){
+        if(ioctl(fd, SIOCGIFDSTADDR, &ifr)==-1){
+            goto IfConfigGet_S_Error;
+        }
+        sin_ptr=(struct sockaddr_in *)&ifr.ifr_dstaddr;
+        memcpy(&(pstBuf->byP2pIp[0]), (char *)&(sin_ptr->sin_addr), 4);
+        utilIp2Val(pstBuf->byP2pIp, &PppP2pIp);
+        if(PppP2pIp==(PppPseudoP2pIp+ppp_idx)){
+            pstBuf->bEnabled=ARC_COM_FALSE;
+            goto IfConfigGet_S_Return;
+        }
+    }
+
+    //Broadcast addr
+    if(is_ppp==0){
+        for(i=0; i<4; i++){
+            pstBuf->byBcAddr[i]=pstBuf->byIp[i]|~(pstBuf->bySubMask[i]);
+        }
+//printf("byBcAddr=%d.%d.%d.%d\n", pstBuf->byBcAddr[0], pstBuf->byBcAddr[1], pstBuf->byBcAddr[2], pstBuf->byBcAddr[3]);
+    }
+        
+
+    //MTU
+    if(ioctl(fd, SIOCGIFMTU, &ifr)==-1){
+        goto IfConfigGet_S_Error;
+    }
+    pstBuf->iMtu=(unsigned short)ifr.ifr_mtu;
+//printf("iMtu=%d\n", pstBuf->iMtu);
+
+    //rx_packets, tx_packets, rx_bytes, tx_bytes are temporarily skipped, no one uses them so far
+
+IfConfigGet_S_Return:
+    close(fd);
+    return ARC_COM_TRUE;
+
+IfConfigGet_S_Error:
+    close(fd);
+    return ARC_COM_ERROR;
+}
+
 /*******************************************************************************
  * Description
  *		get the configuration of routing table
@@ -248,6 +405,9 @@ long osRouteGet( unsigned long lRecCnt, stOsNetRoute* pstBuf )
 	char*			pPtr;
 	char*			pLast;
 	stOsNetRoute	stRoute;
+	//this is tricky, must be sure the pseudo addresses are consistent with those used in on-demand ppp
+    unsigned long	PppPseudoP2pIp, PppP2pIp;
+    int             ppp_idx;
 
 	if (lRecCnt == 0)
 		pstBuf = ARC_COM_NULL;
@@ -303,9 +463,19 @@ long osRouteGet( unsigned long lRecCnt, stOsNetRoute* pstBuf )
 		if ( (pPtr=osStrTok_r( pLast, " ", &pLast )) == ARC_COM_NULL )
 			continue;
 		strcpy( stRoute.sIfName, pPtr );
+
+	    utilIp2Val(byPppPseudoP2pIp, &PppPseudoP2pIp);
+		if(strncmp( stRoute.sIfName, "ppp", 3 )==0){
+		    ppp_idx=atoi(stRoute.sIfName+3);
+		    PppPseudoP2pIp+=ppp_idx;
+		}
+		
 		/**/
-		if ( utilIpCmp( stRoute.byGateway, byPppPseudoP2pIp ) != 0
-		 ||  strncmp( stRoute.sIfName, "ppp", 3 ) != 0 )
+		utilIp2Val(stRoute.byGateway, &PppP2pIp);
+		//if ( utilIpCmp( stRoute.byGateway, byPppPseudoP2pIp ) != 0
+		// ||  strncmp( stRoute.sIfName, "ppp", 3 ) != 0 )
+		if ( strncmp( stRoute.sIfName, "ppp", 3 ) != 0
+		 || PppP2pIp != PppPseudoP2pIp )
 		{
 			if (pstBuf != ARC_COM_NULL)
 			{
@@ -630,7 +800,7 @@ long osWANSockPortGet ( int iType, int *ports, int numPorts  ){
 //																				, stSockInfo[wCnt].byIp[3]
 //																				, stSockInfo[wCnt].iType
 //																				, htons(stSockInfo[wCnt].iPort) );
-			if (iType == stSockInfo[wCnt].iType)
+			if ((iType==0) || (iType == stSockInfo[wCnt].iType))
 			{
 				ports[wTcpUdp++] = htons(stSockInfo[wCnt].iPort);
 			}
@@ -932,6 +1102,180 @@ long osArpEntryGet ( unsigned long lRecCnt, stOsArpEntry* pstBuf )
 
 /*******************************************************************************
  * Description
+ *		update ARP entries of an interface. Send Gratuous ARP in X seconds
+ *
+ * Parameters
+ *		ifname:     device name of the interface
+ *		rate:		Send Gratuous ARP in rate which indicates the numbers per second
+ * Returns
+ *		none
+ ******************************************************************************/
+void osArpTableRefresh2 ( char *ifname , int rate)
+{
+    int                 retVal;
+    int                 if_fd, sock_fd;
+    struct ifreq        ifr;
+    char                mac_addr[6];
+    struct sockaddr_in  *sin;
+    struct sockaddr_ll  sa = {0};	// bug fixed by Fallen, uninitialized structure causes arp sendto() failed.
+    arp_pkt_t           arp_req;
+    unsigned long       if_ip_addr, if_ip_mask, target_ip_addr;
+    unsigned long       i, range;
+    char                sCmd[64];
+   
+    if (ifname == NULL)
+    {
+        return;
+    }
+    
+    /* open socket to get mac, ip4 address, and mask of the specified Interface */
+    //if_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if( if_fd < 0 )
+    {
+        printf("if_fd socket error\n");
+        return;
+    }
+    
+    strncpy(ifr.ifr_name, ifname, IF_NAMESIZE);
+    
+    /* get mac */
+    retVal = ioctl(if_fd, SIOCGIFHWADDR, &ifr, sizeof(ifr));
+    if( retVal < 0 )
+    {
+        printf("ioctl SIOCGIFHWADDR error\n");
+        close(if_fd);
+        return;
+    }
+    mac_addr[0] = ifr.ifr_hwaddr.sa_data[0]&0xff;
+    mac_addr[1] = ifr.ifr_hwaddr.sa_data[1]&0xff;
+    mac_addr[2] = ifr.ifr_hwaddr.sa_data[2]&0xff;
+    mac_addr[3] = ifr.ifr_hwaddr.sa_data[3]&0xff;
+    mac_addr[4] = ifr.ifr_hwaddr.sa_data[4]&0xff;
+    mac_addr[5] = ifr.ifr_hwaddr.sa_data[5]&0xff;
+    
+    /* get ip4 address */
+    retVal = ioctl(if_fd, SIOCGIFADDR, &ifr, sizeof(ifr));
+    if( retVal < 0 )
+    {
+        printf("ioctl SIOCGIFADDR error\n");
+        close(if_fd);
+        return;
+    }
+    sin = (struct sockaddr_in *)&ifr.ifr_addr;
+    if_ip_addr = ntohl(sin->sin_addr.s_addr);
+
+    /* get subnet mask */
+    retVal = ioctl(if_fd, SIOCGIFNETMASK, &ifr, sizeof(ifr));
+    if( retVal < 0 )
+    {
+        printf("ioctl SIOCGIFNETMASK error\n");
+        close(if_fd);
+        return;
+    }
+    sin = (struct sockaddr_in *)&ifr.ifr_addr;
+    if_ip_mask = ntohl(sin->sin_addr.s_addr);
+//printf("if_ip_mask=0x%x\n", if_ip_mask);
+
+    range = (~(if_ip_mask))&0xffffffff;
+    if( range<=0 ){
+        printf("target ip range=%d\n", range);
+        close(if_fd);
+        return;
+    }        
+
+    sock_fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
+    if( sock_fd == -1 )
+    {
+        printf("sock_fd socket error\n");
+        close(if_fd);
+        return;
+    }
+    
+    /* set arp request fixed content */
+    memset(arp_req.dst_mac, 0xff, 6);
+    arp_req.src_mac[0] = mac_addr[0];
+    arp_req.src_mac[1] = mac_addr[1];
+    arp_req.src_mac[2] = mac_addr[2];
+    arp_req.src_mac[3] = mac_addr[3];
+    arp_req.src_mac[4] = mac_addr[4];
+    arp_req.src_mac[5] = mac_addr[5];
+    arp_req.ether_type = htons(0x0806);
+    arp_req.h_type = htons(0x0001);
+    arp_req.proto_type = htons(0x0800);
+    arp_req.h_size = 0x06;
+    arp_req.proto_size = 0x04;
+    arp_req.arp_opcode = htons(0x0001);
+    arp_req.sender_mac[0] = mac_addr[0];
+    arp_req.sender_mac[1] = mac_addr[1];
+    arp_req.sender_mac[2] = mac_addr[2];
+    arp_req.sender_mac[3] = mac_addr[3];
+    arp_req.sender_mac[4] = mac_addr[4];
+    arp_req.sender_mac[5] = mac_addr[5];
+    arp_req.sender_ip = htonl(if_ip_addr);
+    memset(arp_req.target_mac, 0 , 6);
+    memset(arp_req.dummy, 0 , 18);
+    
+    /* set target ip and send */    
+    retVal = ioctl(if_fd, SIOCGIFINDEX, &ifr, sizeof(ifr));
+    if( retVal < 0 )
+    {
+        printf("ioctl SIOCGIFINDEX error\n");
+        close(sock_fd);
+        close(if_fd);
+        return;
+    }
+    
+    /* flush arp cache */
+    sprintf(sCmd, "/usr/sbin/ip neigh flush dev %s", ifname);
+    osSystem(sCmd);
+
+    /* to allow gratuitous ARP response temporarily */
+    sprintf(sCmd, "echo 1 > /proc/sys/net/ipv4/conf/all/arp_accept");
+    if (osSystem( sCmd ) != ARC_COM_OK){
+        printf("set /proc/sys/net/ipv4/conf/all/arp_accept error\n");
+        close(sock_fd);
+        close(if_fd);
+
+        return;
+    }        
+    
+    sa.sll_family = AF_PACKET;
+    sa.sll_ifindex = ifr.ifr_ifindex;
+    sa.sll_protocol = htons(ETH_P_ARP);
+	sa.sll_hatype   = 1;
+	sa.sll_halen = 6;
+
+	int num = 0;
+    for(i = 0; i < range; i++){
+        target_ip_addr=(if_ip_addr&if_ip_mask)+i;
+        if(target_ip_addr != if_ip_addr){
+            arp_req.target_ip = htonl(target_ip_addr);
+			if (rate > 0 && !(++num % rate)) sleep(1);
+            retVal = sendto(sock_fd, &arp_req, sizeof(arp_req), 0,(struct sockaddr *)&sa, sizeof(sa));
+            if( retVal < 0 )
+            {
+                printf("sendto error, target ip=0x%x\n", target_ip_addr);
+            }
+            else{
+                usleep(1000);
+            }
+        }
+    }
+    
+    close(sock_fd);
+    close(if_fd);
+
+    sprintf(sCmd, "echo 0 > /proc/sys/net/ipv4/conf/all/arp_accept");
+    if (osSystem( sCmd ) != ARC_COM_OK){
+        printf("reset /proc/sys/net/ipv4/conf/all/arp_accept error\n");
+    }
+
+    return;
+} 
+
+/*******************************************************************************
+ * Description
  *		update ARP entries of an interface
  *
  * Parameters
@@ -951,10 +1295,10 @@ void osArpTableRefresh ( char *ifname )
     struct ifreq        ifr;
     char                mac_addr[6];
     struct sockaddr_in  *sin;
-    struct sockaddr_ll  sa;
+    struct sockaddr_ll  sa = {0};	// bug fixed by Fallen, uninitialized structure causes arp sendto() failed.
     arp_pkt_t           arp_req;
     unsigned long       if_ip_addr, if_ip_mask, target_ip_addr;
-    int                 i, range;
+    unsigned long       i, range;
     char                sCmd[64];
    
     if (ifname == NULL)

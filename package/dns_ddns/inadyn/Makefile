@@ -17,6 +17,7 @@ define Package/$(PKG_NAME)
 	SUBMENU:=DDNS
 	SECTION:=net
 	CATEGORY:=Network
+	DEPENDS:=+libumng
 	TITLE:=INADYN, dynamic DNS client
 endef
 
@@ -33,13 +34,22 @@ define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR) \
 		TARGET_ARCH=linux \
 		CROSS_COMPILE="$(TARGET_CROSS)" \
-		CFLAGS="$(TARGET_CFLAGS)" \
+		CFLAGS="$(TARGET_CFLAGS) -I$(STAGING_DIR)/usr/include" \
 		all
 endef
 
 define Package/$(PKG_NAME)/install
-	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bin/linux/inadyn $(1)/usr/bin/
+	$(INSTALL_DIR) $(1)/usr/sbin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bin/linux/inadyn $(1)/usr/sbin/
+	cp $(PKG_BUILD_DIR)/bin/linux/inadyn $(PKG_BUILD_DIR)/bin/linux/inadynACS
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bin/linux/inadynACS $(1)/usr/sbin/
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) files/etc/init.d/ddns     $(1)/etc/init.d/ddns
+	$(INSTALL_BIN) files/etc/init.d/ddnsACS     $(1)/etc/init.d/ddnsACS
+	$(INSTALL_BIN) files/usr/sbin/ddns_start $(1)/usr/sbin/ddns_start
+	$(INSTALL_BIN) files/usr/sbin/ddns_startACS $(1)/usr/sbin/ddns_startACS
+	$(INSTALL_BIN) files/usr/sbin/ddns_stop  $(1)/usr/sbin/ddns_stop
+	$(INSTALL_BIN) files/usr/sbin/ddns_stopACS  $(1)/usr/sbin/ddns_stopACS
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))

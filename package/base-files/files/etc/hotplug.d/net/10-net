@@ -36,6 +36,9 @@ addif() {
 			}
 		done
 	done
+
+	# set egree 1p map if necessary
+	/usr/sbin/qos/qos_set_interface_1p_map.sh $INTERFACE
 }
 
 

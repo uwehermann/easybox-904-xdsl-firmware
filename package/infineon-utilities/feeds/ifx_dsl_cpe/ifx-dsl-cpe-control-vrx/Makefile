@@ -6,12 +6,18 @@
 #
 
 include $(TOPDIR)/rules.mk
+include $(TOPDIR)/.config
 include $(INCLUDE_DIR)/kernel.mk
 # re-define PATCH_DIR because kernel.mk will set it to kernel patches
 PATCH_DIR:=./patches
 
 PKG_NAME:=ifx-dsl-cpe-control-vrx
-PKG_VERSION:=4.11.8
+ifdef CONFIG_FW_ARC_CO_COMPATIBLE_SUPPORT
+PKG_VERSION:=4.11.1
+else
+#PKG_VERSION:=4.11.8
+PKG_VERSION:=4.11.11
+endif
 PKG_RELEASE:=1
 PKG_BASE_NAME:=dsl_cpe_control_vrx
 PKG_SOURCE:=$(PKG_BASE_NAME)-$(PKG_VERSION).tar.gz
@@ -19,6 +25,7 @@ PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/dsl_cpe_control-$(PKG_VERSION)
 PKG_SOURCE_URL:=http://localhost
 #PKG_MD5SUM:=
 PKG_BUILD_DEPENDS:=ifx-dsl-cpe-api-vrx ifx-dsl-cpe-control-vrx_DTI:lib-dti
+OPKG_EXTRA_FLAG=--force-downgrade
 
 LANTIQ_BIN_DIR=/opt/lantiq/bin
 # TBR

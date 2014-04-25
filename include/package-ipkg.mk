@@ -137,7 +137,9 @@ ifeq ($(DUMP),)
 
     $$(INFO_$(1)): $$(IPKG_$(1))
 	@[ -d $(TARGET_DIR)/tmp ] || mkdir -p $(TARGET_DIR)/tmp
-	$(OPKG) install $$(IPKG_$(1))
+
+	#$(OPKG) install $$(IPKG_$(1))
+	$(OPKG) $(OPKG_EXTRA_FLAG) install $$(IPKG_$(1))
 	$(if $(filter-out essential,$(PKG_FLAGS)),for flag in $(filter-out essential,$(PKG_FLAGS)); do $(OPKG) flag $$$$flag $(1); done)
 
     $(1)-clean:

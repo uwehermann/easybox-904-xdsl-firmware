@@ -1,4 +1,40 @@
 #!/bin/sh
 
+local mounted_num=0
+local mounted_path
+local FLODER_ID=1
+
+echo webdav_stop execute > /dev/console
+
+WEBDAV_CFG_DIR="/tmp"
+WEBDAV_MOUNTED_FILE="$WEBDAV_CFG_DIR/webdav_mount"
+
 pkill -9 lighttpd
-rm -Rf /tmp/lighttpd.conf
+#rm -Rf /tmp/lighttpd.conf
+#rm -Rf /tmp/lighttpdsameuser.conf
+
+rm -Rf /tmp/webdav
+rm -Rf /tmp/passwd.dat
+rm -Rf /tmp/passwd1.dat
+
+mounted_num=`ccfg_cli -f "$WEBDAV_MOUNTED_FILE" get mounted_num@webdav`
+echo mounted_num = $mounted_num > /dev/console
+
+if [ -f $WEBDAV_MOUNTED_FILE ] ; then
+
+	while [ "${FLODER_ID}" -le "${mounted_num}" ];
+	do
+		mounted_path=`ccfg_cli -f "$WEBDAV_MOUNTED_FILE" get webdav_shared${FLODER_ID}@webdav`
+
+		echo mounted_path = $mounted_path > /dev/console
+
+		umount -f -l "$mounted_path"
+
+		rmdir -p "$mounted_path"
+
+		let FLODER_ID=$FLODER_ID+1
+	done
+
+rm -Rf "$WEBDAV_MOUNTED_FILE"
+
+fi

@@ -1819,7 +1819,7 @@
 /* #undef QNX */
 
 /* Whether the realpath function allows NULL */
-#define REALPATH_TAKES_NULL 1
+//#define REALPATH_TAKES_NULL 1 //to avoid exception on Voda-904-mfr
 
 /* Whether the host os is reliantunix */
 /* #undef RELIANTUNIX */

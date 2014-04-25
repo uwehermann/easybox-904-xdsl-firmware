@@ -355,16 +355,23 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 				#ifup wan050
 				ppacmd addwan -i ptm0
 				CNT=0
+				ptm0_mac=$ethaddr
 				while [ $CNT -lt 8 ] ; do
 					wanIf=`printf "wan%03d" $(($CNT+50))`
 					proto=`ccfg_cli get proto@$wanIf`
 					admin=`ccfg_cli get adminstate@$wanIf`
 					ifname=`ccfg_cli get ifname@$wanIf`
 					if [ "$admin" == "enable" ] ; then
+						vlan_tagged=`ccfg_cli get vlan_tagged@$wanIf`
+						if [ "$vlan_tagged" != "1" ]; then
+							mac_adddr=$ethaddr
+						else
+							mac_adddr=$ptm0_mac
+						fi
 						ifconfig $ifname down
-						ifconfig $ifname hw ether $ethaddr
-						switch_utility MAC_TableEntryRemove 0 $ethaddr
-						switch_utility MAC_TableEntryAdd 2 6 0 1 $ethaddr
+						ifconfig $ifname hw ether $mac_adddr
+						switch_utility MAC_TableEntryRemove 0 $mac_adddr
+						switch_utility MAC_TableEntryAdd 2 6 0 1 $mac_adddr
 						ifup $wanIf
 					fi
 					ethaddr=`echo $ethaddr | next_macaddr 0`

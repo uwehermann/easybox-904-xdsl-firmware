@@ -1671,8 +1671,11 @@ KillTimer(HWND hwnd, UINT idTimer)
 	 * timer in a TimerProc will end up with memory errors
 	 */
 	for (tm=timerList; tm != NULL; tm = tm->next)
-		if( (tm->hwnd == hwnd) && (tm->idTimer == idTimer) )
+		if( (tm->hwnd == hwnd) && (tm->idTimer == idTimer) ){
+			if(tm->bRemove == TRUE)	//already marked Remove, return FALSE to inform upper layer
+				return FALSE;
 			return tm->bRemove = TRUE;
+		}
 	return FALSE;
 }
 

@@ -7,6 +7,7 @@
 # $Id: $
 
 include $(TOPDIR)/rules.mk
+include $(TOPDIR)/.config
 include $(INCLUDE_DIR)/kernel.mk
 # re-define PATCH_DIR because kernel.mk will set it to kernel patches
 PATCH_DIR:=./patches
@@ -34,7 +35,17 @@ PKG_VERSION_B_5:=05.05.00.0E.00.06_05.05.01.00.01.02
 PKG_VERSION_B_6:=05.05.01.06.01.06_05.05.01.07.01.02
 PKG_VERSION_B_7:=05.05.00.0E.00.06_05.05.01.08.01.02
 PKG_VERSION_B_8:=05.05.01.06.01.06_05.05.01.0A.01.02
-PKG_VERSION_B_9:=05.05.01.06.01.06_05.05.01.0B.01.02
+#PKG_VERSION_B_9:=05.05.01.06.01.06_05.05.03.03.01.02
+PKG_VERSION_B_9:=05.05.01.07.01.06_05.05.03.03.01.02
+
+#Although we didn't use PKG_VERSION during compile.
+#We setup this variable to force top-level Make can process compile.
+#so...don't remove these.
+ifdef CONFIG_FW_ARC_CO_COMPATIBLE_SUPPORT
+PKG_VERSION:=1
+else
+PKG_VERSION:=2
+endif
 
 PKG_BASE_NAME:=dsl_vr9_firmware_xdsl
 #PKG_SOURCE:=$(PKG_BASE_NAME)-$(PKG_VERSION).tar.gz
@@ -65,11 +76,21 @@ endif
 ifdef CONFIG_FW_XDSL_ANNEX_B_9
 PKG_SOURCE:=$(PKG_BASE_NAME)-$(PKG_VERSION_B_9).tar.gz
 endif
+ifdef CONFIG_FW_ARC_CO_COMPATIBLE_SUPPORT
+PKG_SOURCE:=$(PKG_BASE_NAME)-$(PKG_VERSION_B_3).tar.gz
+endif
 #PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(PKG_BASE_NAME)-$(PKG_VERSION)
 PKG_RELEASE:=1
 #PKG_UNPACK:=gzip -dc $(DL_DIR)/$(PKG_SOURCE) | $(TAR) -C $(PKG_BUILD_DIR) $(TAR_OPTIONS)
 PKG_SOURCE_URL:=http://localhost
 PKG_TARGET_BASE_NAME:=xcpe_hw.bin
+OPKG_EXTRA_FLAG=--force-downgrade
+
+ifdef CONFIG_FW_ARC_CO_COMPATIBLE_SUPPORT
+PKG_VERSION:=1
+else
+PKG_VERSION:=2
+endif
 
 # include $(INCLUDE_DIR)/package-version-override.mk
 include $(INCLUDE_DIR)/package.mk
@@ -187,6 +208,10 @@ define Package/$(PKG_NAME)/config
 		depends on PACKAGE_$(PKG_NAME)
 		bool "VDSL port bonding support"
 		default n
+	config FW_ARC_CO_COMPATIBLE_SUPPORT
+		depends on PACKAGE_$(PKG_NAME)
+		bool "arcadyan in-house CO compatile support. This results in datapump rollback."
+		default n
 endef
 
 ifdef CONFIG_FW_XDSL_BETA_ANNEX_A
@@ -257,6 +282,9 @@ ifdef CONFIG_FW_XDSL_ANNEX_B_8
 endif
 ifdef CONFIG_FW_XDSL_ANNEX_B_9
 	FW_VER = $(PKG_VERSION_B_9)
+endif
+ifdef CONFIG_FW_ARC_CO_COMPATIBLE_SUPPORT
+	FW_VER = $(PKG_VERSION_B_3)
 endif
 define Build/Configure
 endef

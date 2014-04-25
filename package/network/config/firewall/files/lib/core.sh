@@ -4,8 +4,6 @@ FW_LIBDIR=${FW_LIBDIR:-/lib/firewall}
 
 . $FW_LIBDIR/fw.sh
 include /lib/network
-#lock/unlock iptables command
-#. /usr/sbin/iptables_utility.sh
 
 fw_start() {
 	local fwfastCurVer fwfastVer fwfastinit
@@ -18,6 +16,7 @@ fw_start() {
 	fwfastParamsPath="/etc/config"
 	fwfastParamsfile="fwfast"
 	fwfastCurVer="2.55.1"
+	firewallStatefile="var/state/firewall"
 	isFastInit=0
 	fwfastinit=0
 	if [ ! -f "$fwfastParamsPath/$fwfastParamsfile" ]; then
@@ -56,7 +55,7 @@ fw_start() {
 	}
 
 	uci_set_state firewall core "" firewall_state
-#ipt_lock_res
+
 	if [ $fwfastinit -eq 0 ]; then
 		fw_clear DROP
 #		(iptables -t mangle -D FORWARD -j zone_lan3_MSSFIX >/dev/null 2>&1)
@@ -64,14 +63,14 @@ fw_start() {
 #		(iptables -t mangle -D FORWARD -j zone_lan1_MSSFIX >/dev/null 2>&1)
 #		(iptables -t mangle -D FORWARD -j zone_lan_MSSFIX >/dev/null 2>&1)
 		iptables-save -t mangle > $pre_rebuildfile
-		ip6tables-save -t mangle > $pre_rebuildfilev6
+#		ip6tables-save -t mangle > $pre_rebuildfilev6
 		#create clean iptable-save for later save firewall&nat rules
 		iptables -t mangle -Z
 		iptables -t mangle -F
 		iptables -t mangle -X
-		ip6tables -t mangle -Z
-		ip6tables -t mangle -F
-		ip6tables -t mangle -X
+#		ip6tables -t mangle -Z
+#		ip6tables -t mangle -F
+#		ip6tables -t mangle -X
 
 
 		fw_callback pre core
@@ -103,14 +102,15 @@ fw_start() {
 		fw_callback post core
 
 		iptables-save > $rebuildfile
-		ip6tables-save > $rebuildfilev6
+#		ip6tables-save > $rebuildfilev6
 		for cfg in $rebuildcfg
 		do
 			cp "$cfg" "$cfg.$rebuildsub"
 		done
+		cp -f $firewallStatefile $fwfastParamsPath/firewall.state
 		#restore previous iptables-save other thean firewall&nat
 		iptables-restore --noflush "$pre_rebuildfile"
-		ip6tables-restore --noflush "$pre_rebuildfilev6"
+#		ip6tables-restore --noflush "$pre_rebuildfilev6"
 		rm -f $pre_rebuildfile $pre_rebuildfilev6
 		uci set $fwfastParamsfile.@Params[-1].FW_ZONES="$FW_ZONES"
 		uci set $fwfastParamsfile.@Params[-1].Version="$fwfastCurVer"
@@ -119,12 +119,13 @@ fw_start() {
 	else
 		echo "found $rebuildfile quick rebuild start"
 		FW_ZONES=`uci get $fwfastParamsfile.@Params[-1].FW_ZONES`
+		cp -f $fwfastParamsPath/firewall.state $firewallStatefile
 		(iptables -t mangle -D FORWARD -j zone_lan3_MSSFIX >/dev/null 2>&1)
 		(iptables -t mangle -D FORWARD -j zone_lan2_MSSFIX >/dev/null 2>&1)
 		(iptables -t mangle -D FORWARD -j zone_lan1_MSSFIX >/dev/null 2>&1)
 		(iptables -t mangle -D FORWARD -j zone_lan_MSSFIX >/dev/null 2>&1)
 		iptables-restore --noflush "$rebuildfile"
-		ip6tables-restore --noflush "$rebuildfilev6"
+#		ip6tables-restore --noflush "$rebuildfilev6"
 
 		logFile="/tmp/ifhotplug.log"
 		tmpFile="/tmp/ifhotplug.sh"
@@ -142,18 +143,18 @@ fw_start() {
 		echo "found $rebuildfile quick rebuild end"
 
 	fi
-#ipt_unlock_res
+
 
 	echo "Loading includes"
 	config_foreach fw_load_include include
 
-	uci_set_state firewall core zones "$FW_ZONES"
-	uci_set_state firewall core loaded 1
 
 	#set default policy for ipv6 before openwrt is intergated with arcadyan firewall
 	ip6tables -P INPUT ACCEPT
 	ip6tables -P FORWARD ACCEPT
 	ip6tables -P OUTPUT ACCEPT
+	uci_set_state firewall core zones "$FW_ZONES"
+	uci_set_state firewall core loaded 1
 
 }
 

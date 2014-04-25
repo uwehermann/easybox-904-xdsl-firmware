@@ -142,8 +142,8 @@ gen_pwd() {
 	#echo "#######################" > /dev/console
 	# generate default user $ROOT_ACCOUNT:`umngcli get password@system` and $GUEST_ACCOUNT:
 		#
-	deluser $GUEST_ACCOUNT 2>&-
-	adduser -h "$DFTSHAREDIR" -D -H $GUEST_ACCOUNT
+	#deluser $GUEST_ACCOUNT 2>&-
+	#adduser -h "$DFTSHAREDIR" -D -H $GUEST_ACCOUNT
 		#
 	#[Fix] Comment second line below : Prevent from anonymous account login after disabling anonymous in GUI
 	#add_ftp_user $ROOT_ACCOUNT  1 "$DFTSHAREDIR" `umngcli get password@system`

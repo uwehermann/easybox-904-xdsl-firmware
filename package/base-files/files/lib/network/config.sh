@@ -391,12 +391,12 @@ setup_interface() {
 		config_get mtu "$config" mtu
 		config_get macaddr "$config" macaddr
 		## bitonic test, ctc added
-		if [ "$upper_iface" == "$iface" ]; then
-		{
+		###if [ "$upper_iface" == "$iface" ]; then
+		###{
 			[ -n "$macaddr" ] && $DEBUG ifconfig "$iface" down
 			$DEBUG ifconfig "$iface" ${macaddr:+hw ether "$macaddr"} ${mtu:+mtu $mtu} up
-		}
-		fi
+		###}
+		###fi
 		##end of bitonic test
 	}
 	set_interface_ifname "$config" "$iface"
@@ -484,7 +484,7 @@ setup_interface() {
 			$DEBUG eval udhcpc -t 0 -i "$iface" \
 				${ipaddr:+-r $ipaddr} \
 				${hostname:+-H $hostname} \
-				${clientid:+-c $clientid} \
+				${clientid:+-m $clientid} \
 				${vendorid:+-V $vendorid} \
 				-b -p "$pidfile" $broadcast $ip6rd \
 				-O staticroutes -R &

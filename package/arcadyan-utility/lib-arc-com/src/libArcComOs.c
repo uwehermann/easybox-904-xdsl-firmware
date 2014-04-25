@@ -250,7 +250,7 @@ long osSystem( char* sShellCmd )
  ******************************************************************************/
 long osSystem_GetOutput ( char* sShellCmd, char* sBuf, int iBufSz )
 {
-	char	sCmd[256];
+	char	sCmd[512];
 	char	sTmpFn[32];
 	FILE*	pFile;
 	long	lCnt;

@@ -123,15 +123,25 @@ int FAST_FUNC send_decline(uint32_t xid, uint32_t server, uint32_t requested)
 }
 #endif
 
-
 /* Broadcast a DHCP discover packet to the network, with an optionally requested IP */
 int FAST_FUNC send_discover(uint32_t xid, uint32_t requested)
 {
 	struct dhcp_packet packet;
 	static int msgs = 0;
+	time_t currect_time;
+	unsigned long diff_l;
+	unsigned short diff_s;
 
 	init_packet(&packet, DHCPDISCOVER);
 	packet.xid = xid;
+
+	currect_time = time(NULL);
+	diff_l = currect_time - getStartTime();
+	diff_s = htons(diff_l);
+	//printf("[send_discover]: diff_s = %d\n", diff_s);
+
+	packet.secs = diff_s;
+
 	if (requested)
 		add_simple_option(packet.options, DHCP_REQUESTED_IP, requested);
 
@@ -145,6 +155,7 @@ int FAST_FUNC send_discover(uint32_t xid, uint32_t requested)
 
 	if (msgs++ < 3)
 	bb_info_msg("Sending discover...");
+
 	return raw_bcast_from_client_config_ifindex(&packet);
 }
 
@@ -157,9 +168,19 @@ int FAST_FUNC send_select(uint32_t xid, uint32_t server, uint32_t requested)
 {
 	struct dhcp_packet packet;
 	struct in_addr addr;
+	time_t currect_time;
+	unsigned long diff_l;
+	unsigned short diff_s;
 
 	init_packet(&packet, DHCPREQUEST);
 	packet.xid = xid;
+
+	currect_time = time(NULL);
+	diff_l = currect_time - getStartTime();
+	diff_s = htons(diff_l);
+	//printf("[send_select]: diff_s = %d\n", diff_s);
+
+	packet.secs = diff_s;
 
 	add_simple_option(packet.options, DHCP_REQUESTED_IP, requested);
 	add_simple_option(packet.options, DHCP_SERVER_ID, server);
@@ -175,10 +196,20 @@ int FAST_FUNC send_select(uint32_t xid, uint32_t server, uint32_t requested)
 int FAST_FUNC send_renew(uint32_t xid, uint32_t server, uint32_t ciaddr)
 {
 	struct dhcp_packet packet;
+	time_t currect_time;
+	unsigned long diff_l;
+	unsigned short diff_s;
 
 	init_packet(&packet, DHCPREQUEST);
 	packet.xid = xid;
 	packet.ciaddr = ciaddr;
+
+	currect_time = time(NULL);
+	diff_l = currect_time - getStartTime();
+	diff_s = htons(diff_l);
+	//printf("[send_renew]: diff_s = %d\n", diff_s);
+
+	packet.secs = diff_s;
 
 	add_param_req_option(&packet);
 	bb_info_msg("Sending renew...");

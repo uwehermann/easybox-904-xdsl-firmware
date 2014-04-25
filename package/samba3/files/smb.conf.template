@@ -20,3 +20,5 @@
 #	invalid users = root
 #	smb passwd file = /etc/samba/smbpasswd
 #	interfaces = |INTERFACES|
+	wide links = no
+	

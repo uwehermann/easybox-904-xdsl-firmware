@@ -71,13 +71,15 @@ start() {
 
 	# update boot counter
 	/usr/sbin/uboot_env.sh --set --name bootnum --value 0
+	FW_VERSION=`uboot_env --get --name sw_version`
 	if [ `grep -c "export CONFIG_UBOOT_CONFIG_DUAL_IMAGE=1" /etc/config.sh` -ge 1 ] ; then
 		BOOTID=`/usr/sbin/uboot_env.sh --get --name bootid --force 2>&-`
-		echo "######################################################" > /dev/console
-		echo "#                                                    #" > /dev/console
-		echo "#              BOOT FROM IMAGE ${BOOTID:-1}                     #" > /dev/console
-		echo "#                                                    #" > /dev/console
-		echo "######################################################" > /dev/console
+		echo "####################################################" > /dev/console
+		echo "                                                    " > /dev/console
+		echo "              BOOT FROM IMAGE ${BOOTID:-1}          " > /dev/console
+		echo "              FW Version: ${FW_VERSION}             " > /dev/console
+		echo "                                                    " > /dev/console
+		echo "####################################################" > /dev/console
 	fi
 }
 

@@ -1,11 +1,5 @@
 #!/bin/sh
 
-rm -Rf /tmp/nas
-rm -Rf /tmp/nas2
-rm -Rf /tmp/webdav
-rm -Rf /tmp/passwd.dat
-rm -Rf /tmp/passwd1.dat
-
 DRV_STAT_PATH="/tmp/fs"
 DRV_STAT_FILE="${DRV_STAT_PATH}/drvstat"
 VOL_INFO_FILE="${DRV_STAT_PATH}/volinfo"
@@ -14,16 +8,27 @@ REALM="webdav"
 WEBDAV_CFG_DIR="/tmp"
 WEBDAV_PWD_FILE="$WEBDAV_CFG_DIR/passwd.dat"
 WEBDAV_PWD_FILE1="$WEBDAV_CFG_DIR/passwd1.dat"
+WEBDAV_MOUNTED_FILE="$WEBDAV_CFG_DIR/webdav_mount"
 
-mkdir -m 0755 -p /tmp/nas
-mkdir -m 0755 -p /tmp/nas2
+if ! [ -f $WEBDAV_MOUNTED_FILE ] ; then
+	echo "!" > $WEBDAV_MOUNTED_FILE
+fi
+
 mkdir -m 0755 -p /tmp/webdav
+mkdir -m 0755 -p /tmp/nasshare
+
+USER1=""
+USER2=""
+THESAMEUSER=0
 
 webdav_disk_online_check()
 {
 	local DRIVE_ID
+	local FOLDER_ID
+	local DATA_ERR
 
 	DRIVE_ID=0
+	DATA_ERR=0
 
 	ONLINE1=`ccfg_cli -f "$DRV_STAT_FILE" get online1@drive`
 	VENDOR1=`ccfg_cli -f "$DRV_STAT_FILE" get vendor1@drive`
@@ -40,20 +45,51 @@ webdav_disk_online_check()
 	echo $ONLINE1 $VENDOR1 $MODEL1 $DEVNAME1> /dev/console
 	echo $ONLINE2 $VENDOR2 $MODEL2 $DEVNAME2> /dev/console
 
-	MAX_DRIVE=`ccfg_cli get max_drive@drive`
+	#MAX_DRIVE=`ccfg_cli get max_drive@drive`
+	MAX_DRIVE=4
+	MAX_FOLDER=`ccfg_cli get max_folder@drive`
 
 	while [ "${DRIVE_ID}" -lt "${MAX_DRIVE}" ];
 	do
 		DRV_DATA=`ccfg_cli get webdav_disk${DRIVE_ID}@drive`
 
-		#echo DRV_DATA = $DRV_DATA > /dev/console
+
+		echo DRV_DATA = $DRV_DATA > /dev/console
 		online=`echo "$DRV_DATA"  | cut -d ':' -f 1`
+		if [ "$online" != "0" ] && [ "$online" != "1" ]; then
+			#echo online = $online > /dev/console
+			DATA_ERR=1
+		fi
 		enable_sharing=`echo "$DRV_DATA"  | cut -d ':' -f 2`
+		if [ "$enable_sharing" != "0" ] && [ "$enable_sharing" != "1" ]; then
+			#echo enable_sharing = $enable_sharing > /dev/console
+			DATA_ERR=1
+		fi
 		share_all_folder=`echo "$DRV_DATA"  | cut -d ':' -f 3`
+		if [ "$share_all_folder" != "0" ] && [ "$share_all_folder" != "1" ]; then
+			#echo share_all_folder = $share_all_folder > /dev/console
+			DATA_ERR=1
+		fi
 		vendor=`echo "$DRV_DATA"  | cut -d ':' -f 4`
+		if [ "$vendor" == "" ]; then
+			#echo vendor = $vendor > /dev/console
+			DATA_ERR=1
+		fi
 		model=`echo "$DRV_DATA"  | cut -d ':' -f 5`
+		if [ "$model" == "" ]; then
+			#echo model = $model > /dev/console
+			DATA_ERR=1
+		fi
 		serial_num=`echo "$DRV_DATA"  | cut -d ':' -f 6`
+		if [ "$serial_num" == "" ]; then
+			#echo serial_num = $serial_num > /dev/console
+			DATA_ERR=1
+		fi
 		dev_name=`echo "$DRV_DATA"  | cut -d ':' -f 7`
+		if [ "$dev_name" != "sda" ] && [ "$dev_name" != "sdb" ]; then
+			#echo dev_name = $dev_name > /dev/console
+			DATA_ERR=1
+		fi
 		username=`echo "$DRV_DATA"  | cut -d ':' -f 8`
 		password=`echo "$DRV_DATA"  | cut -d ':' -f 9`
 
@@ -67,18 +103,50 @@ webdav_disk_online_check()
 		#echo username = $username > /dev/console
 		#echo password = $password > /dev/console
 
+		if [ "$DATA_ERR" == "1" ]; then
+
+			#echo DATA_ERR condition > /dev/console
+
+			ccfg_cli unset webdav_disk${DRIVE_ID}@drive
+
+			FOLDER_ID=0
+
+			while [ "${FOLDER_ID}" -lt "${MAX_FOLDER}" ];
+			do
+				ccfg_cli unset webdav${DRIVE_ID}_folder${FOLDER_ID}@drive
+				ccfg_cli unset webdav${DRIVE_ID}_folder${FOLDER_ID}_display_name@drive
+
+				let FOLDER_ID=$FOLDER_ID+1
+			done
+
+			DRV_DATA=""
+		fi
+
+		DATA_ERR=0
+
 		if [ -n "$DRV_DATA" ]; then
+			#echo disk_check condition > /dev/console
 			if [ "${ONLINE1}" == "1" ] && [ "${vendor}" == "${VENDOR1}" ] && [ "${model}" == "${MODEL1}" ] && [ "${serial_num}" == "${SERIAL_NUM1}" ]; then
+				USER1="${username}"
 				ccfg_cli set webdav_disk${DRIVE_ID}@drive="1:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${DEVNAME1}:${username}:${password}"
 			elif [ "${ONLINE2}" == "1" ] && [ "${vendor}" == "${VENDOR2}" ] && [ "${model}" == "${MODEL2}" ] && [ "${serial_num}" == "${SERIAL_NUM2}" ]; then
+				USER2="${username}"
 				ccfg_cli set webdav_disk${DRIVE_ID}@drive="1:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${DEVNAME2}:${username}:${password}"
 			else
 				ccfg_cli set webdav_disk${DRIVE_ID}@drive="0:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${dev_name}:${username}:${password}"
 			fi
 		fi
 
-			let DRIVE_ID=$DRIVE_ID+1
-		done
+		let DRIVE_ID=$DRIVE_ID+1
+	done
+
+	if [ -n "${USER1}" ] && [ -n "${USER2}" ]; then
+		if [ "${USER1}" == "${USER2}" ]; then
+			echo USER1 $USER1 > /dev/console
+			echo USER2 $USER2 > /dev/console
+			THESAMEUSER=1
+		fi
+	fi
 }
 
 webdav_default_folder_set()
@@ -88,17 +156,19 @@ webdav_default_folder_set()
 	local CHECK
 	local DEV_NAME
 
-	echo "[webdav_folder_set] setting ftp default folder >>>"> /dev/console
+	echo "[webdav_folder_set] setting webdav default folder >>>"> /dev/console
 	echo $2 $3 $4 $5> /dev/console
 
 	DRIVE_ID=0
+	OFFLINE_ID=-1
 	VALID_ID=-1
 	CHECK=0
 
 	if [ "$1" == "0" ]; then
 		webdav_disk_online_check
 
-		MAX_DRIVE=`ccfg_cli get max_drive@drive`
+		#MAX_DRIVE=`ccfg_cli get max_drive@drive`
+		MAX_DRIVE=4
 
 		MAX_FOLDER=`ccfg_cli get max_folder@drive`
 
@@ -135,21 +205,29 @@ webdav_default_folder_set()
 					ccfg_cli set webdav_disk${DRIVE_ID}@drive="1:${enable_sharing}:${share_all_folder}:${vendor}:${model}:${serial_num}:${5}:${username}:${password}"
 					CHECK=1
 				fi
-				else
+			else
 				if [ "${VALID_ID}" == "-1" ]; then
-				VALID_ID=$DRIVE_ID
+					VALID_ID=$DRIVE_ID
 				fi
 			fi
 
-			if [ "${online}" == "0" ] && [ "${VALID_ID}" == "-1" ]; then
-				VALID_ID=$DRIVE_ID
+			#if [ "${online}" == "0" ] && [ "${VALID_ID}" == "-1" ]; then
+			#	VALID_ID=$DRIVE_ID
+			#fi
+
+			if [ "${online}" == "0" ] && [ "${OFFLINE_ID}" == "-1" ]; then
+				OFFLINE_ID=$DRIVE_ID
 			fi
 
 			let DRIVE_ID=$DRIVE_ID+1
 		done
 
+		if [ "${VALID_ID}" == "-1" ]; then
+			VALID_ID=$OFFLINE_ID
+		fi
+
 		if [ "${CHECK}" == "0" ]; then
-				ccfg_cli set webdav_disk${VALID_ID}@drive="1:0:1:${2}:${3}:${4}:${5}:root${VALID_ID}:"
+				ccfg_cli set webdav_disk${VALID_ID}@drive="1:0:1:${2}:${3}:${4}:${5}::"
 
 				FOLDER_ID=0
 
@@ -190,9 +268,16 @@ webdav_folder_add()
 	local tmp_nolabel_count=0
 	local display_name
 	local directory_type=1  # type 1= /vol_label/display_name , type 2= complete directory structure.
+	local mounted_num=0
+	local mounted_root
+	local mounted_path
+	local ON_LINE_DISK_ID=-1
 
 	rm -Rf /tmp/lighttpd.conf
 	cp /etc/lighttpd/lighttpd.conf /tmp/lighttpd.conf
+
+	#rm -Rf /tmp/lighttpdsameuser.conf
+	#cp /etc/lighttpd/lighttpdsameuser.conf /tmp/lighttpdsameuser.conf
 
 	#copy ssl certificate
 	if [ -e /etc/config/cert/WebServer/webserver.key.pem ]; then
@@ -209,8 +294,9 @@ webdav_folder_add()
 
 	cat /tmp/webdav/lighttpd.key /tmp/webdav/lighttpd.crt > /tmp/webdav/lighttpd.pem
 
-	MAX_DRIVE=`ccfg_cli get max_drive@drive`
-#	MAX_FOLDER=`ccfg_cli get max_folder@drive`
+	#MAX_DRIVE=`ccfg_cli get max_drive@drive`
+	MAX_DRIVE=4
+	#MAX_FOLDER=`ccfg_cli get max_folder@drive`
 	MAX_FOLDER=8
 	CONTENT_SHARING=`ccfg_cli get content_sharing@drive`
 
@@ -273,23 +359,66 @@ webdav_folder_add()
 
 		if [ -n "${DRV_DATA}" ] && [ -n "${DEV_NAME}" ]; then
 			if [ "${online}" == "1" ] && [ "${enable_sharing}" == "1" ]; then
-				RUN_SERVER=1;
+				let ON_LINE_DISK_ID=ON_LINE_DISK_ID+1
+				RUN_SERVER=1
 				USR_PASSWORD=${password}
 
 				echo USR_PASSWORD $USR_PASSWORD > /dev/console
 
+				mkdir -m 0755 -p "/tmp/nasshare/${username}"
+
 				#echo "$username:${USR_PASSWORD}" >> $WEBDAV_PWD_FILE
-				if [ "${DEV_NAME}" == "sda" ]; then
+				if [ "${DEV_NAME}" == "sda" ] || [ "$THESAMEUSER" == "1" ]; then
 					realm=$REALM
 					hash=`echo -n "$username:$realm:${password}" | md5sum | cut -b -32`
 					echo "$username:$realm:$hash" >> $WEBDAV_PWD_FILE
+					if [ "$THESAMEUSER" == "0" ]; then
+						echo "\$HTTP[\"url\"] =~ \"^/${username}\" {" >> /tmp/lighttpd.conf
+						echo 'webdav.activate = "enable"' >> /tmp/lighttpd.conf
+						echo 'webdav.is-readonly = "disable"' >> /tmp/lighttpd.conf
+						echo 'dir-listing.activate = "enable"' >> /tmp/lighttpd.conf
+						echo 'auth.backend = "htdigest"' >> /tmp/lighttpd.conf
+						echo 'auth.backend.htdigest.userfile = "/tmp/passwd.dat"' >> /tmp/lighttpd.conf
+						echo 'auth.require = ( "" => (' >> /tmp/lighttpd.conf
+						echo '"method" => "digest",' >> /tmp/lighttpd.conf
+						echo '"realm" => "webdav",' >> /tmp/lighttpd.conf
+						echo '"require" => "valid-user" ))' >> /tmp/lighttpd.conf
+						echo '}' >> /tmp/lighttpd.conf
+					fi
+					if [ "$THESAMEUSER" == "1" ] && [ "$ON_LINE_DISK_ID" == "0" ]; then
+						echo "\$HTTP[\"url\"] =~ \"^/${username}\" {" >> /tmp/lighttpd.conf
+						echo 'webdav.activate = "enable"' >> /tmp/lighttpd.conf
+						echo 'webdav.is-readonly = "disable"' >> /tmp/lighttpd.conf
+						echo 'dir-listing.activate = "enable"' >> /tmp/lighttpd.conf
+						echo 'auth.backend = "htdigest"' >> /tmp/lighttpd.conf
+						echo 'auth.backend.htdigest.userfile = "/tmp/passwd.dat"' >> /tmp/lighttpd.conf
+						echo 'auth.require = ( "" => (' >> /tmp/lighttpd.conf
+						echo '"method" => "digest",' >> /tmp/lighttpd.conf
+						echo '"realm" => "webdav",' >> /tmp/lighttpd.conf
+						echo '"require" => "valid-user" ))' >> /tmp/lighttpd.conf
+						echo '}' >> /tmp/lighttpd.conf
+					fi
 				else
 					realm=$REALM
 					hash=`echo -n "$username:$realm:${password}" | md5sum | cut -b -32`
 					echo "$username:$realm:$hash" >> $WEBDAV_PWD_FILE1
+					echo "\$HTTP[\"url\"] =~ \"^/${username}\" {" >> /tmp/lighttpd.conf
+					echo 'webdav.activate = "enable"' >> /tmp/lighttpd.conf
+					echo 'webdav.is-readonly = "disable"' >> /tmp/lighttpd.conf
+					echo 'dir-listing.activate = "enable"' >> /tmp/lighttpd.conf
+					echo 'auth.backend = "htdigest"' >> /tmp/lighttpd.conf
+					echo 'auth.backend.htdigest.userfile = "/tmp/passwd1.dat"' >> /tmp/lighttpd.conf
+					echo 'auth.require = ( "" => (' >> /tmp/lighttpd.conf
+					echo '"method" => "digest",' >> /tmp/lighttpd.conf
+					echo '"realm" => "webdav",' >> /tmp/lighttpd.conf
+					echo '"require" => "valid-user" ))' >> /tmp/lighttpd.conf
+					echo '}' >> /tmp/lighttpd.conf
 				fi
 
-				#mkdir -m 0755 -p /tmp/nas
+				if [ "$ON_LINE_DISK_ID" == "1" ]; then
+					nolabel_count=$tmp_nolabel_count
+					echo nolabel_count in share_all = $nolabel_count > /dev/console
+				fi
 
 				if [ "${share_all_folder}" == "1" ]; then
 
@@ -304,7 +433,7 @@ webdav_folder_add()
 					while [ "${part_id}" -le "${dev_mount_num}" ];
 					do
 						vol_type=`ccfg_cli -f "$VOL_INFO_FILE" get volType@disk${dev_id}_${part_id}`
-						if [ "${vol_type}" == "Unknown" ]; then
+						if [ "${vol_type}" == "Unknown" ] || [ "${vol_type}" == "" ]; then
 							let part_id=$part_id+1
 							continue
 						fi
@@ -322,29 +451,45 @@ webdav_folder_add()
 
 						if [ "$vol_label" == "<no_label>" ]; then
 							if [ "$nolabel_count" == "0" ]; then
-								if [ "${DEV_NAME}" == "sda" ]; then
-									ln -sf ${ALLPATH} "/tmp/nas/DATA"
+								if [ "${DEV_NAME}" == "sda" ] || [ "$THESAMEUSER" == "1" ]; then
+									mkdir -p "/tmp/nasshare/${username}/DATA"
+									mount -o bind ${ALLPATH} "/tmp/nasshare/${username}/DATA"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/DATA"
 								else
-									ln -sf ${ALLPATH} "/tmp/nas2/DATA"
+									mkdir -p "/tmp/nasshare/${username}/DATA"
+									mount -o bind ${ALLPATH} "/tmp/nasshare/${username}/DATA"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/DATA"
 								fi
 								let nolabel_count=$nolabel_count+2
 							else
-								if [ "${DEV_NAME}" == "sda" ]; then
-									ln -sf ${ALLPATH} "/tmp/nas/DATA-${nolabel_count}"
+								if [ "${DEV_NAME}" == "sda" ] || [ "$THESAMEUSER" == "1" ]; then
+									mkdir -p "/tmp/nasshare/${username}/DATA-${nolabel_count}"
+									mount -o bind ${ALLPATH} "/tmp/nasshare/${username}/DATA-${nolabel_count}"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/DATA-${nolabel_count}"
 								else
-									ln -sf ${ALLPATH} "/tmp/nas2/DATA-${nolabel_count}"
+									mkdir -p "/tmp/nasshare/${username}/DATA-${nolabel_count}"
+									mount -o bind ${ALLPATH} "/tmp/nasshare/${username}/DATA-${nolabel_count}"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/DATA-${nolabel_count}"
 								fi
 								let nolabel_count=$nolabel_count+1
 							fi
 						else
-							if [ "${DEV_NAME}" == "sda" ]; then
-								ln -sf ${ALLPATH} "/tmp/nas/${vol_label}"
+							if [ "${DEV_NAME}" == "sda" ] || [ "$THESAMEUSER" == "1" ]; then
+								mkdir -p "/tmp/nasshare/${username}/${vol_label}"
+								mount -o bind ${ALLPATH} "/tmp/nasshare/${username}/${vol_label}"
+								let mounted_num=$mounted_num+1
+								ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/${vol_label}"
 							else
-								ln -sf ${ALLPATH} "/tmp/nas2/${vol_label}"
+								mkdir -p "/tmp/nasshare/${username}/${vol_label}"
+								mount -o bind ${ALLPATH} "/tmp/nasshare/${username}/${vol_label}"
+								let mounted_num=$mounted_num+1
+								ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/${vol_label}"
 							fi
 						fi
-
-						#ln -sf ${ALLPATH} /tmp/nas/partition${part_id}
 
 						file_name=`echo "$ALLPATH"  | grep -o "[^/]*$"`
 						#echo file_name = $file_name > /dev/console
@@ -356,29 +501,35 @@ webdav_folder_add()
 							rm -Rf "$total_file_name"
 						fi
 						let part_id=$part_id+1
-						#ln -s /tmp/usb /tmp/nas
-						#mount --bind /tmp/nas /tmp/usb
 
 					done
 
+					if [ "$ON_LINE_DISK_ID" == "0" ]; then
+						tmp_nolabel_count=$nolabel_count
+						echo tmp_nolabel_count = $tmp_nolabel_count > /dev/console
+					fi
+
+					if [ "$THESAMEUSER" == "0" ]; then
+						nolabel_count=0
+						tmp_nolabel_count=0
+					fi
+
 				else
 					dev_id=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_id@volinfo`
-					if [ "$dev_id" == "1" ]; then
+					if [ "$ON_LINE_DISK_ID" == "1" ]; then
 						nolabel_count=$tmp_nolabel_count
 					fi
 					mount_num=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_mount_num@volinfo`
-					#echo mount_num = $mount_num > /dev/console
+					echo mount_num = $mount_num > /dev/console
 					part_id=1
 					while [ "${part_id}" -le "${mount_num}" ];
 					do
 						vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${part_id}`
 						if [ "$vol_label" == "<no_label>" ]; then
 							if [ "$nolabel_count" == "0" ]; then
-								#ln -sf ${ALLPATH} "/tmp/nas/DATA"
 								vol_label_1="DATA"
 								let nolabel_count=$nolabel_count+2
 							else
-								#ln -sf ${ALLPATH} "/tmp/nas/DATA-${nolabel_count}"
 								if [ "$nolabel_count" == "2" ]; then
 									vol_label_2="DATA-${nolabel_count}"
 								fi
@@ -407,6 +558,11 @@ webdav_folder_add()
 						let part_id=$part_id+1
 					done
 
+					if [ "$ON_LINE_DISK_ID" == "0" ]; then
+						tmp_nolabel_count=$nolabel_count
+						echo tmp_nolabel_count = $tmp_nolabel_count > /dev/console
+					fi
+
 					while [ "${FOLDER_ID}" -lt "${MAX_FOLDER}" ];
 					do
 						FOLDER_DATA=`ccfg_cli get webdav${DRIVE_ID}_folder${FOLDER_ID}@drive`
@@ -434,14 +590,9 @@ webdav_folder_add()
 							mount_num=`ccfg_cli -f "$VOL_INFO_FILE" get ${DEV_NAME}_mount_num@volinfo`
 							echo mount_num = $mount_num > /dev/console
 
-							if [ "$dev_id" == "0" ]; then
-								tmp_nolabel_count=$nolabel_count
-								echo tmp_nolabel_count = $tmp_nolabel_count > /dev/console
-							fi
-
 							part_id=1
 
-							if [ "$dev_id" == "0" ]; then
+							if [ "$ON_LINE_DISK_ID" == "0" ]; then
 								nolabel_count=0
 							else
 								nolabel_count=$tmp_nolabel_count
@@ -502,12 +653,13 @@ webdav_folder_add()
 								let part_id=$part_id+1
 							done
 
+
 							#vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${partition_idx}`
 							#echo "vol_label = "$vol_label
 
 							echo vol_label = $vol_label > /dev/console
 
-							display_name=`ccfg_cli get webdav"$dev_id"_folder"$FOLDER_ID"_display_name@drive`
+							display_name=`ccfg_cli get webdav"${DRIVE_ID}"_folder"${FOLDER_ID}"_display_name@drive`
 
 							echo display_name = $display_name > /dev/console
 
@@ -516,21 +668,42 @@ webdav_folder_add()
 							echo ALLPATH = $ALLPATH > /dev/console
 
 							if [ "$path" == "/" ]; then
-								if [ "${DEV_NAME}" == "sda" ]; then
-									ln -s "$ALLPATH" "/tmp/nas/${vol_label}"
+								if [ "${DEV_NAME}" == "sda" ] || [ "$THESAMEUSER" == "1" ]; then
+									if [ "${display_name}" == "${vol_label}" ]; then
+										display_name="${display_name}"_ROOT
+									fi
+									mkdir -p "/tmp/nasshare/${username}/${display_name}"
+									mount -o bind "$ALLPATH" "/tmp/nasshare/${username}/${display_name}"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/${display_name}"
 								else
-									ln -s "$ALLPATH" "/tmp/nas2/${vol_label}"
+									if [ "${display_name}" == "${vol_label}" ]; then
+										display_name="${display_name}"_ROOT
+									fi
+									mkdir -p "/tmp/nasshare/${username}/${display_name}"
+									mount -o bind "$ALLPATH" "/tmp/nasshare/${username}/${display_name}"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="/tmp/nasshare/${username}/${display_name}"
 								fi
 							else
-								if [ "${DEV_NAME}" == "sda" ]; then
-									cd "/tmp/nas"
+								if [ "${DEV_NAME}" == "sda" ] || [ "$THESAMEUSER" == "1" ]; then
+									cd "/tmp/nasshare/${username}"
+									mounted_root="/tmp/nasshare/${username}"
 								else
-									cd "/tmp/nas2"
+									cd "/tmp/nasshare/${username}"
+									mounted_root="/tmp/nasshare/${username}"
 								fi
 								mkdir $vol_label
+								mounted_path="$mounted_root"/"$vol_label"
 								cd $vol_label
 								if [ "$directory_type" == "1" ]; then
-									ln -s "$ALLPATH" $display_name
+									#ln -s "$ALLPATH" $display_name
+									mounted_path="$mounted_path"/"$display_name"
+									echo mounted_path = $mounted_path > /dev/console
+									mkdir -p "$mounted_path"
+									mount -o bind "$ALLPATH" "$mounted_path"
+									let mounted_num=$mounted_num+1
+									ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set webdav_shared${mounted_num}@webdav="$mounted_path"
 								elif [ "$directory_type" == "2" ]; then
 									token_idx=2  # first token always is empty (ex: /xxx/yyy)
 									path_token=`echo "$path"  | cut -d '/' -f $token_idx`
@@ -549,13 +722,8 @@ webdav_folder_add()
 								fi
 							fi
 
-							SHAREPATH="/tmp/nas/"${share_folder}
+							SHAREPATH="/tmp/nasshare/${username}/"${share_folder}
 							echo SHAREPATH = $SHAREPATH > /dev/console
-
-							#mkdir -m 0755 -p /tmp/nas/${share_folder}
-							#ln -s $ALLPATH /tmp/nas/${share_folder}
-							#ln -s "${ALLPATH}" "/tmp/nas" #$SHAREPATH
-							#mount --bind /tmp/nas/${share_folder} $ALLPATH
 
 							if [ "$path" == "/" ]; then
 								total_file_name="${ALLPATH}""${mount_folder}"
@@ -570,20 +738,30 @@ webdav_folder_add()
 						fi
 						let FOLDER_ID=$FOLDER_ID+1
 					done
+					if [ "$THESAMEUSER" == "0" ]; then
+						nolabel_count=0
+						tmp_nolabel_count=0
+					fi
 				fi
 			fi
 		fi
 		let DRIVE_ID=$DRIVE_ID+1
 	done
 
+	ccfg_cli -f "$WEBDAV_MOUNTED_FILE" set mounted_num@webdav="${mounted_num}"
+
 	if [ "${RUN_SERVER}" == "1" ]; then
 		mkdir -m 0755 -p /tmp/log/lighttpd
-		echo 'server.port = 8080' >> /tmp/lighttpd.conf
+		#echo 'server.port = 8080' >> /tmp/lighttpd.conf
+		#echo 'server.port = 8080' >> /tmp/lighttpdsameuser.conf
+		LAN_IP=`ip -f inet addr show | grep inet | grep -w "br-lan" | awk '{ print $2 }' | cut -d '/' -f 1`
+		#echo LAN_IP = $LAN_IP > /dev/console
+		echo "server.bind = \"${LAN_IP}\"" >> /tmp/lighttpd.conf
 		if [ "${ACCESS_FROM_WAN}" == "1" ]; then
 			echo "\$SERVER[\"socket\"] == \":${remote_port}\" { " >> /tmp/lighttpd.conf
 			echo 'ssl.engine = "enable"'  >> /tmp/lighttpd.conf
 			echo 'ssl.pemfile = "/tmp/webdav/lighttpd.pem"'  >> /tmp/lighttpd.conf
-			echo 'server.document-root = "/tmp"'  >> /tmp/lighttpd.conf
+			echo 'server.document-root = "/tmp/nasshare"'  >> /tmp/lighttpd.conf
 			echo '}'  >> /tmp/lighttpd.conf
 		fi
 		/usr/sbin/lighttpd -f /tmp/lighttpd.conf

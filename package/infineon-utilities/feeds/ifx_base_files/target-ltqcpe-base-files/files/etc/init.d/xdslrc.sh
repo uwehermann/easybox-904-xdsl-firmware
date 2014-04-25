@@ -181,15 +181,19 @@ if [ "$DSL_NOTIFICATION_TYPE" == "DSL_STATUS" ]  && [ "$DSL_XTU_STATUS" == "ADSL
 
 	if [ "${xTSE4:8}" == "40" ]  ||  [ "${xTSE7:8}" == "1" ] ; then
 		if [ "$current_sipo" != "0x20" ] ; then
+			dsl_cpe_pipe.sh acs 2
 			echo "%% enable annex J: value should be 0x20" > /dev/console
 			echo mask_set 0x20 0x20 > /proc/driver/sipo  #enable annex J relay
-			dsl_cpe_pipe.sh acs 2
+			ccfg_cli set annexJ@dsl=1
+			ccfg_cli commitcfg
 		fi
 	else
 		if [ "$current_sipo" != "0x0" ] ; then
+			dsl_cpe_pipe.sh acs 2
 			echo "%% disable annex J: value should be 0x0" > /dev/console
 			echo mask_set 0x00 0x20 > /proc/driver/sipo #disable annex J relay
-			dsl_cpe_pipe.sh acs 2
+			ccfg_cli set annexJ@dsl=0
+			ccfg_cli commitcfg
 		fi
 	fi
 
@@ -222,8 +226,8 @@ elif [ "$DSL_XTU_STATUS" == "ADSL" ] ; then
 fi
 #sowa add --
 
-if [ "$DSL_NOTIFICATION_TYPE" == "DSL_STATUS" ] ; then
-
+case "$DSL_NOTIFICATION_TYPE" in
+	DSL_STATUS)
 	# Handles the DSL Link Bringup sequence
 	echo "[xdslrc.sh] DSL_STATUS Notification, DSL_XTU_STATUS=${DSL_XTU_STATUS}, Next_xTM_Mode=$Next_xTM_Mode" >> $OUT_FILE
 	if [ "$DSL_XTU_STATUS" = "VDSL" ]; then
@@ -274,7 +278,7 @@ if [ "$DSL_NOTIFICATION_TYPE" == "DSL_STATUS" ] ; then
 ####				. /etc/init.d/ltq_wan_changeover.sh stop
 ####			fi
 			### bitonic
-			#/usr/sbin/status_oper -u -f $RC_CONF SET "wan_phy_cfg" "wanphy_phymode" "3" \
+			#/usr/sbin/status_oper -u -f /etc/rc.conf SET "wan_phy_cfg" "wanphy_phymode" "3" \
 			#		"wanphy_tc" "1"
 			ccfg_cli -f $XDSL_RC_CONF set wanphy_phymode@wan_phy_cfg="3"
 			ccfg_cli -f $XDSL_RC_CONF set wanphy_tc@wan_phy_cfg="1"
@@ -282,7 +286,7 @@ if [ "$DSL_NOTIFICATION_TYPE" == "DSL_STATUS" ] ; then
 			# Providing a sleep to write cfg properly in NAND models before a reboot.
 			# sleep 1
 			### bitonic
-			#/usr/sbin/status_oper -u -f $RC_CONF SET "xDSL_Config" "Next_xDSL_Mode" "2" \
+			#/usr/sbin/status_oper -u -f /etc/rc.conf SET "xDSL_Config" "Next_xDSL_Mode" "2" \
 			#		"Next_xTM_Mode" "PTM" "xDSL_SW_Forced_Reboot" "1"
 			ccfg_cli -f $XDSL_RC_CONF set Next_xDSL_Mode@xDSL_Config="2"
 			ccfg_cli -f $XDSL_RC_CONF set Next_xTM_Mode@xDSL_Config="PTM"
@@ -381,14 +385,14 @@ echo "[xdslrc.sh] neg_xdsl_mode=$neg_xdsl_mode" >> $OUT_FILE
 ####					. /etc/init.d/ltq_wan_changeover.sh stop
 ####				fi
 				### bitonic
-				#/usr/sbin/status_oper -u -f $RC_CONF SET "wan_phy_cfg" "wanphy_phymode" "0" \
+				#/usr/sbin/status_oper -u -f /etc/rc.conf SET "wan_phy_cfg" "wanphy_phymode" "0" \
 				#		"wanphy_tc" $tc
 				ccfg_cli -f $XDSL_RC_CONF set wanphy_phymode@wan_phy_cfg="0"
 				ccfg_cli -f $XDSL_RC_CONF set wanphy_tc@wan_phy_cfg="$tc"
 				### end
 				# sleep 1
 				### bitonic
-				#/usr/sbin/status_oper -u -f $RC_CONF SET "xDSL_Config" "Next_xDSL_Mode" "1" \
+				#/usr/sbin/status_oper -u -f /etc/rc.conf SET "xDSL_Config" "Next_xDSL_Mode" "1" \
 				#		"Next_xTM_Mode" $neg_xTM_Mode "xDSL_SW_Forced_Reboot" "0"
 				ccfg_cli -f $XDSL_RC_CONF set Next_xDSL_Mode@xDSL_Config="1"
 				ccfg_cli -f $XDSL_RC_CONF set Next_xTM_Mode@xDSL_Config="$neg_xTM_Mode"
@@ -423,8 +427,8 @@ echo "[xdslrc.sh] neg_xdsl_mode=$neg_xdsl_mode" >> $OUT_FILE
 			else
 				echo "$DSL_TC_LAYER_STATUS not supported for $xTM_Mgmt_Mode Management Mode"
 				### bitonic
-				#/usr/sbin/status_oper -u -f $RC_CONF SET "wan_phy_cfg" "wanphy_phymode" "0"
-				#/usr/sbin/status_oper -u -f $RC_CONF SET "xDSL_Config" "Next_xDSL_Mode" "1"
+				#/usr/sbin/status_oper -u -f /etc/rc.conf SET "wan_phy_cfg" "wanphy_phymode" "0"
+				#/usr/sbin/status_oper -u -f /etc/rc.conf SET "xDSL_Config" "Next_xDSL_Mode" "1"
 				ccfg_cli -f $XDSL_RC_CONF set wanphy_phymode@wan_phy_cfg="0"
 				ccfg_cli -f $XDSL_RC_CONF set Next_xDSL_Mode@xDSL_Config="1"
 				### end
@@ -434,8 +438,9 @@ echo "[xdslrc.sh] neg_xdsl_mode=$neg_xdsl_mode" >> $OUT_FILE
 	echo "[xdslrc.sh] xDSL Mode = $DSL_XTU_STATUS" >> $OUT_FILE
 	echo "[xdslrc.sh] DSL TC Mode = $DSL_TC_LAYER_STATUS" >> $OUT_FILE
 
+	;;
 # This Notification type is valid only for VRX Platform
-elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_MULTIMODE_FSM_STATUS" ] ; then
+	DSL_MULTIMODE_FSM_STATUS)
 
 	if [ "$DSL_NEXT_MODE" = "VDSL" ]; then
 		echo "Event DSL NEXT MODE = $DSL_NEXT_MODE"
@@ -457,57 +462,57 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_MULTIMODE_FSM_STATUS" ] ; then
 
 		# If Next_xTM_Mode is PTM, then set the Multimode Configuration via
 		# DSL CLI interface, else save the above parameters to rc.conf and Reboot
-		if [ "$Next_xTM_Mode" = "PTM" ]; then
+		#if [ "$wanphy_tc" = "1" ]; then
 			# Send the Multimode FSM to DSL Application with VDSL (=2 as NextMode)
-			/opt/ifx/bin/dsl_cpe_pipe.sh mfcs 2
-		else
-			echo " ChangeMode from $Next_xDSL_Mode/$Next_xTM_Mode"
+					/opt/ifx/bin/dsl_cpe_pipe.sh mfcs 2
+		#else
+		#	echo " ChangeMode from $Next_xDSL_Mode/$Next_xTM_Mode"
 ####			if [ "$platform" = "VR9" -o "$platform" = "AR9" -o "$platform" = "AMAZON_SE" ]; then
 ####				. /etc/init.d/ltq_wan_changeover.sh stop
 ####			fi
 			# Save the parameters to rc.conf and Reboot
 			### bitonic
-			#/usr/sbin/status_oper -u -f $RC_CONF SET "wan_phy_cfg" "wanphy_phymode" "3" \
+			#/usr/sbin/status_oper -u -f /etc/rc.conf SET "wan_phy_cfg" "wanphy_phymode" "3" \
 			#		"wanphy_tc" "1"
-			ccfg_cli -f $XDSL_RC_CONF set wanphy_phymode@wan_phy_cfg="3"
-			ccfg_cli -f $XDSL_RC_CONF set wanphy_tc@wan_phy_cfg="1"
+		#	ccfg_cli -f $XDSL_RC_CONF set wanphy_phymode@wan_phy_cfg="3"
+		#	ccfg_cli -f $XDSL_RC_CONF set wanphy_tc@wan_phy_cfg="1"
 			### end
-			# sleep 1
+			# usleep 250000
 			### bitonic
 			#/usr/sbin/status_oper -u -f $RC_CONF SET "xDSL_Config" "Next_xDSL_Mode" "2" \
 			#		"Next_xTM_Mode" "PTM" "xDSL_SW_Forced_Reboot" "1" "xDSL_ADSL_Sub_Prefix" $AdslSubPref
-			ccfg_cli -f $XDSL_RC_CONF set Next_xDSL_Mode@xDSL_Config="2"
-			ccfg_cli -f $XDSL_RC_CONF set Next_xTM_Mode@xDSL_Config="PTM"
-			ccfg_cli -f $XDSL_RC_CONF set xDSL_SW_Forced_Reboot@xDSL_Config="1"
-			ccfg_cli -f $XDSL_RC_CONF set xDSL_ADSL_Sub_Prefix@xDSL_Config="$AdslSubPref"
+		#	ccfg_cli -f $XDSL_RC_CONF set Next_xDSL_Mode@xDSL_Config="2"
+		#	ccfg_cli -f $XDSL_RC_CONF set Next_xTM_Mode@xDSL_Config="PTM"
+		#	ccfg_cli -f $XDSL_RC_CONF set xDSL_SW_Forced_Reboot@xDSL_Config="1"
+		#	ccfg_cli -f $XDSL_RC_CONF set xDSL_ADSL_Sub_Prefix@xDSL_Config="$AdslSubPref"
 			### end
 			# sleep 1
-			if [ "$platform" = "VR9" -o "$platform" = "AR9" -o "$platform" = "AMAZON_SE" ]; then
+		#	if [ "$platform" = "VR9" -o "$platform" = "AR9" -o "$platform" = "AMAZON_SE" ]; then
 				#echo "Restarting apps at MMFSM mode"
 ####				/etc/init.d/ltq_wan_changeover.sh start
 
 #### wan up
-				if [ "$XDSL_RC_DO_ONLINE_CHANGEOVER_WAN_TYPE" == 1 -a "$detect_wan" == "1" ] ; then
+		#		if [ "$XDSL_RC_DO_ONLINE_CHANGEOVER_WAN_TYPE" == 1 -a "$detect_wan" == "1" ] ; then
 					# auto-sensing
-					previous_wan_type=`ccfg_cli get active_wan_type@system`
-					if [ "$previous_wan_type" != "3" ] ; then
-						/usr/bin-wan/online_changeover_wantype.sh $previous_wan_type 3
-						echo "[xdslrc.sh] [MMFSM VDSL] ==> change wan type" > /dev/console
+		#			previous_wan_type=`ccfg_cli get active_wan_type@system`
+		#			if [ "$previous_wan_type" != "3" ] ; then
+		#				/usr/bin-wan/online_changeover_wantype.sh $previous_wan_type 3
+		#				echo "[xdslrc.sh] [MMFSM VDSL] ==> change wan type" > /dev/console
 						# sleep 3
-					fi
-				fi
+		#			fi
+		#		fi
 ####
 
-			else
+		#	else
 				#Modify default WAN setting of upcoming mode
-				/usr/sbin/ifx_event_util "DEFAULT_WAN" "MOD"
+		#		/usr/sbin/ifx_event_util "DEFAULT_WAN" "MOD"
 
 				# Reboot the CPE with the modified values
 				# These new values will take effect on DSL bringup
 				# sync; sleep 1
-#			/sbin/reboot
-			fi
-		fi
+#		#	/sbin/reboot
+		#	fi
+		#fi
 	elif [ "$DSL_NEXT_MODE" = "ADSL" ]; then
 		echo "Event DSL NEXT MODE = $DSL_NEXT_MODE"
 		# Store the xDSL_ADSL_Sub_Prefix from the DSL SM Environment
@@ -532,8 +537,9 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_MULTIMODE_FSM_STATUS" ] ; then
 	fi
 	echo "DSL NEXT MODE = $DSL_NEXT_MODE"
 	echo "ADSL SUB PREF = $DSL_ADSL_SUB_PREF"
+	;;
 
-elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
+	DSL_INTERFACE_STATUS)
 
 	case "$DSL_INTERFACE_STATUS" in
 		"UP")
@@ -543,11 +549,6 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 			#	echo 1    > /sys/class/leds/broadband_led/brightness
 			#fi
 			arc_led.sh adsl on
-			echo "[xdslrc.sh] xDSL Enter SHOWTIME!!" >> /dev/console
-			#. /etc/rc.d/adsl_up
-			echo "7" > /tmp/adsl_status
-			# Enable Far-End Parameter Request, Lantiq not supported yet
-			#/opt/lantiq/bin/dsl_cpe_pipe.sh ifcs 0 0 0 0 0 0
 
 			# Adjust the upstream/downstream rates of the queues created in the system
 
@@ -556,6 +557,13 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 			echo "US Rate $UPSTREAM_RATE kbps" > /dev/console
 			let DOWNSTREAM_RATE=$DSL_DATARATE_DS_BC0/1000
 			echo "DS Rate $DOWNSTREAM_RATE kbps" > /dev/console
+
+			echo "[xdslrc.sh] xDSL Enter SHOWTIME!!" >> /dev/console
+			#. /etc/rc.d/adsl_up
+			echo "7" > /tmp/adsl_status
+		# Enable Far-End Parameter Request
+			/opt/lantiq/bin/dsl_cpe_pipe.sh ifcs 0 0 0 0 0 0
+
 			if [ $qIfTypeActive -eq $QOS_INTF_WAN_ATM -o  $qIfTypeActive -eq $QOS_INTF_WAN_PTM ]; then
 				. /etc/rc.d/ipqos_rate_update $UPSTREAM_RATE $DOWNSTREAM_RATE
 			fi
@@ -639,16 +647,23 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 				#ifup wan050
 				ppacmd addwan -i ptm0
 				CNT=0
+				ptm0_mac=$ethaddr
 				while [ $CNT -lt 8 ] ; do
 					wanIf=`printf "wan%03d" $(($CNT+50))`
 					proto=`ccfg_cli get proto@$wanIf`
 					admin=`ccfg_cli get adminstate@$wanIf`
 					ifname=`ccfg_cli get ifname@$wanIf`
 					if [ "$admin" == "enable" ] ; then
+						vlan_tagged=`ccfg_cli get vlan_tagged@$wanIf`
+						if [ "$vlan_tagged" != "1" ]; then
+							mac_adddr=$ethaddr
+						else
+							mac_adddr=$ptm0_mac
+						fi
 						ifconfig $ifname down
-						ifconfig $ifname hw ether $ethaddr
-						switch_utility MAC_TableEntryRemove 0 $ethaddr
-						switch_utility MAC_TableEntryAdd $DFT_WAN_FID 6 0 1 $ethaddr
+						ifconfig $ifname hw ether $mac_adddr
+						switch_utility MAC_TableEntryRemove 0 $mac_adddr
+						switch_utility MAC_TableEntryAdd $DFT_WAN_FID 6 0 1 $mac_adddr
 						ifup $wanIf
 					fi
 					ethaddr=`echo $ethaddr | next_macaddr 0`
@@ -664,6 +679,8 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 			if [ -x /etc/init.d/brnsip ] ; then
 				/etc/init.d/brnsip bandwidth $UPSTREAM_RATE
 			fi
+			echo "VDSL UP FINISH !!!" >/dev/console				
+			echo "1" >/tmp/vdsl_up_finish			
 			;;
 
 		"DOWN")
@@ -709,7 +726,7 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 				arc_led.sh adsl off
 				echo "[xdslrc.sh] xDSL Leave SHOWTIME!!" > /dev/console
 				#. /etc/rc.d/adsl_down
-				echo "0" > /tmp/adsl_status
+				echo "0" > /tmp/adsl_status							
 			fi
 			;;
 
@@ -737,28 +754,29 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_INTERFACE_STATUS" ] ; then
 			arc_led.sh adsl blink
 			;;
 	esac
+	;;
 
-elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_DATARATE_STATUS" ] ||
-	 [ "$DSL_NOTIFICATION_TYPE" == "DSL_DATARATE_STATUS_US" ] ||
-	 [ "$DSL_NOTIFICATION_TYPE" == "DSL_DATARATE_STATUS_DS" ] ; then
+	DSL_DATARATE_STATUS)
+
 
 	get_dsl_rate
 	echo "DSL US Data Rate = "`expr $DSL_DATARATE_US_BC0 / 1000`" kbps"
 	echo $DSL_DATARATE_US_BC0 > /tmp/dsl_us_rate
 	echo "DSL DS Data Rate = "`expr $DSL_DATARATE_DS_BC0 / 1000`" kbps"
 	echo $DSL_DATARATE_DS_BC0 > /tmp/dsl_ds_rate
-	# convert the data rate in kbps to cells/sec and store in running config file
+	# Adjust ATM and IP QoS Rate shaping parameters based on line rate
+	#. /etc/rc.d/init.d/qos_rate_update
+	# This is handled in ADSL UP Event
+	;;
+
+	DSL_DATARATE_STATUS_US)
+	# convert the upstream data rate in kbps to cells/sec and store in running config file
 	# this will be used for bandwidth allocation during wan connection creation
 	# 8 * 53 = 424
 	DSL_DATARATE_US_CPS=$(( ${DSL_DATARATE_US_BC0} / 424 ))
 	### bitonic
 	#/usr/sbin/status_oper SET BW_INFO max_us_bw "${DSL_DATARATE_US_CPS}"
 	ccfg_cli -f $SYSTEM_STATUS set max_us_bw@BW_INFO="${DSL_DATARATE_US_CPS}"
-	### end
-	DSL_DATARATE_DS_CPS=$(( ${DSL_DATARATE_DS_BC0} / 424 ))
-	### bitonic
-	#/usr/sbin/status_oper SET BW_INFO max_us_bw "${DSL_DATARATE_DS_CPS}"
-	ccfg_cli -f $SYSTEM_STATUS set max_us_bw@BW_INFO="${DSL_DATARATE_DS_CPS}"
 	### end
 	# Adjust ATM and IP QoS Rate shaping parameters based on line rate
 	UPSTREAM_RATE=$(( $DSL_DATARATE_US_BC0 / 1000 ))
@@ -767,5 +785,8 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_DATARATE_STATUS" ] ||
 		/etc/rc.d/ipqos_rate_update $UPSTREAM_RATE $DOWNSTREAM_RATE
 	fi
 
-fi
+	[ "$wanphy_tc" = "1" ] && ( [ -z $CONFIG_FEATURE_LQ_OPTIMIZATION ] || ifconfig ptm0 txqueuelen 400 )
+	# This is handled in ADSL UP Event
+	;;
+esac
 

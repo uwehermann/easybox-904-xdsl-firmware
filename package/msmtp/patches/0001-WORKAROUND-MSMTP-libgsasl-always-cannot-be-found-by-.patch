@@ -1,0 +1,50 @@
+From 6edb1f2dc26c8466482c75dff5cb43aa1bacda0c Mon Sep 17 00:00:00 2001
+From: Peter Wang <sh_wang@arcadyan.com>
+Date: Wed, 10 Apr 2013 11:36:38 +0800
+Subject: [PATCH 1/1] [WORKAROUND][MSMTP] libgsasl always cannot be found by
+ configure
+
+Description:
+	When configuring msmtp package with libgsasl support, it always
+	complained libgsasl cannot be found that caused msmtp cannot
+	leverage libgsasl to support additional Auth Methods
+Root Cause:
+	Seems that pkg-config verifies build machine's installed package
+	instead of openwrt installed packages
+Solution:
+	1. Set libgsasl flag to 1 no matter it is found or not if
+	--with-libgsasl is indicated in configure paramters
+	2. Link libgsasl in libssl_LIBS and tls_LIBS variables
+Note:
+	Need to time to find out how to make configure aware of openwrt
+	installed packages
+	This is only effective when SSL/TLS is enabled
+---
+ configure.ac |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 38a7460..5b9b66f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -123,7 +123,7 @@ AC_ARG_WITH([libgsasl], [AS_HELP_STRING([--with-libgsasl],
+ 	[Use GNU SASL authentication library.])],
+     [libgsasl=$withval], [libgsasl=yes])
+ if test "$libgsasl" != "no"; then
+-    PKG_CHECK_MODULES([libgsasl], [libgsasl >= 0.0], [HAVE_LIBGSASL=1], [HAVE_LIBGSASL=0])
++    PKG_CHECK_MODULES([libgsasl], [libgsasl >= 0.0], [HAVE_LIBGSASL=1], [HAVE_LIBGSASL=1])
+     if test "$HAVE_LIBGSASL" != "1"; then
+ 	AC_MSG_WARN([library libgsasl not found:])
+ 	AC_MSG_WARN([$libgsasl_PKG_ERRORS])
+@@ -131,6 +131,8 @@ if test "$libgsasl" != "no"; then
+ 	libgsasl="no"
+     else
+ 	libgsasl="yes"
++	libssl_LIBS="$libssl_LIBS -lgsasl"
++	tls_LIBS="$libssl_LIBS"
+ 	AC_DEFINE([HAVE_LIBGSASL], [1], [Define to 1 if libgsasl is available])
+     fi
+ fi
+-- 
+1.7.7.6.1.g731bc
+

@@ -564,6 +564,13 @@ static int br_selective_flood4(struct net_bridge_port *p, struct sk_buff *skb)
 		(ntohl(iph->daddr) & 0xffffff00U) == 0xef000000U)
 		return 1;
 
+#if 1
+	/* Terry 20121220, bypass the packets to 239.255.0.0/16 */
+	/* This may only for DT requirement. */
+	if ((ntohl(iph->daddr) & 0xffff0000U) == 0xefff0000U)
+		return 1;
+#endif
+
 	return br_snoop_multicast_data(p, &daddr, &saddr);
 }
 

@@ -12,6 +12,7 @@ run_scripts() {
 		CONSOLE=`uboot_env --get --name console`
 		if [ "$CONSOLE" == "ttyS0" ] ; then
 			uboot_env --set --name console --value '' > /dev/null
+			echo "Turn off console output. Reboot to take effect!" > /dev/console
 			/sbin/reboot
 		fi
                 rm -f /dev/kmsg
@@ -23,6 +24,7 @@ run_scripts() {
 		CONSOLE=`uboot_env --get --name console`
 		if [ "$CONSOLE" == "" ] ; then
 			uboot_env --set --name console --value 'ttyS0' > /dev/null
+			echo "Turn on console output. Reboot to take effect!" > /dev/console
 			/sbin/reboot
 		fi
 	fi

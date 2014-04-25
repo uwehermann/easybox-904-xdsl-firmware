@@ -1,0 +1,18 @@
+#!/bin/sh
+
+WAN=`wandataif.sh`
+
+enable=`ccfg_cli get enable@ddnsACS`
+svcidx=`ccfg_cli get select@ddnsACS`
+service=`ccfg_cli get service${svcidx}@ddnsACS`
+username=`ccfg_cli get username${svcidx}@ddnsACS`
+password=`ccfg_cli get password${svcidx}@ddnsACS`
+hostname=`ccfg_cli get hostname${svcidx}@ddnsACS`
+
+if [ "$enable" != 1 ] ||  [ -z "$WAN" ] || [ -z "$svcidx" ] || [ -z "$service" ] || [ -z "$username" ] || [ -z "$password" ] || [ -z "$hostname" ] ; then
+	exit 0
+fi
+
+rm -Rf /tmp/inadyn_ip.cache
+
+/usr/sbin/inadynACS --dyndns_system "${service}" -u "${username}" -p "${password}" -a "${hostname}" > /dev/null 2>&1

@@ -1,0 +1,17 @@
+#!/bin/sh
+
+case "$1" in
+	start)
+		/usr/sbin/ddns_startACS &
+		;;
+	stop)
+		/usr/sbin/ddns_stopACS &
+		;;
+	restart)
+		(/usr/sbin/ddns_stopACS ; /usr/sbin/ddns_startACS) &
+		;;
+	*)
+		echo $"Usage $0 {start|stop|restart}"
+		;;
+esac
+

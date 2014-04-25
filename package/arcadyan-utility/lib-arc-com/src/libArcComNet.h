@@ -60,6 +60,7 @@ extern "C" {
 
 
 extern long		osIfConfigGet ( char* sIfName, unsigned long lRecCnt, stOsNetIfInfo* pstBuf );
+extern long     osIfConfigGet_S( char* sIfName, stOsNetIfInfo* pstBuf );
 extern long		osSockPortGet ( int iType, unsigned long lRecCnt, stOsSocketPortInfo* pstBuf, unsigned char* bySrcIp );
 extern long		osWANSockPortGet ( int iType, int* ports, int numPorts  );
 extern long		osRouteGet ( unsigned long lRecCnt, stOsNetRoute* pstBuf );
@@ -72,6 +73,7 @@ extern long		osDhcpClientGet ( unsigned long lRecCnt, stOsDhcpClientInfo* stBuf 
 extern long		osArpEntryGetOne ( stOsArpEntry* stBuf );
 extern long		osArpEntryGet ( unsigned long lRecCnt, stOsArpEntry* stBuf );
 extern void     osArpTableRefresh ( char *ifname );
+extern void     osArpTableRefresh2 ( char *ifname, int rate );
 extern void     osArpCurrentTableRefresh ( char *ifname );
 
 extern long		osSambaIsEnable( void );

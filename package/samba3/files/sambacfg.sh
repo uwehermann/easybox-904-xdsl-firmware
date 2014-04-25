@@ -136,6 +136,42 @@ smbcfg_data_retrieve()
 	smbcfg_data_parse $1 "$DATA"
 }
 
+smbcfg_check()
+{
+	local DATA_ERR=0
+
+	if [ "$cfg_enable" == "0" ] && [ "$cfg_online" == "0" ]; then
+		return
+	fi
+
+	if [ "$cfg_enable" != "0" ] && [ "$cfg_enable" != "1" ]; then
+		DATA_ERR=1
+	fi
+	if [ "$cfg_online" != "0" ] && [ "$cfg_online" != "1" ]; then
+		DATA_ERR=1
+	fi
+	if [ "$cfg_vendor" == "" ]; then
+		DATA_ERR=1
+	fi
+	if [ "$cfg_model" == "" ]; then
+		DATA_ERR=1
+	fi
+	if [ "$cfg_devname" != "" ] && [ "$cfg_devname" != "sda" ] && [ "$cfg_devname" != "sdb" ]; then
+		DATA_ERR=1
+	fi
+	if [ "$cfg_shareAll" != "0" ] && [ "$cfg_shareAll" != "1" ]; then
+		DATA_ERR=1
+	fi
+
+	if [ "$DATA_ERR" == "1" ]; then
+		echo "@@@ DATA ERROR !!! account: "$1 > /dev/console
+		cfg_enable=0
+		cfg_online=0
+		ccfg_cli set smb_account$1@samba=0:0
+		ccfg_cli set smb$1_drive@samba=0:0:0
+	fi
+}
+
 smb_sharemode_add() {
 	local MAX_FOLNUM
 	local FOLDER_ID=0
@@ -222,7 +258,10 @@ smb_usermode_add(){
 	local nolabel_count=0
 	local display_name
 	local directory_type=1  # type 1= /vol_label/display_name , type 2= complete directory structure.
-	
+	local mount_folders
+	local mount_folder_new
+	local umount_folder
+
 exec >& /dev/console
 ccfg_cli set mode@samba=1
 
@@ -233,6 +272,7 @@ ccfg_cli set mode@samba=1
 	while [ "${ACCOUNT_ID}" -lt "${MAX_ACCOUNT_NUM}" ]
 	do
 		smbcfg_data_retrieve 2 $ACCOUNT_ID
+		smbcfg_check $ACCOUNT_ID
 
 		if [ -n "${DATA}" ] && [ "${cfg_enable}" == "1" ] && [ "${cfg_online}" == "1" ] && [ "${content_sharing_enable}" == "1" ]; then
 			dev_id=`ccfg_cli -f "$VOL_INFO_FILE" get ${cfg_devname}_id@volinfo`
@@ -253,8 +293,24 @@ fi
 
 #			echo -e "\n[$cfg_name]\n\tpath = $RealPath" >> /tmp/smb.conf
 #			echo -e "\n[SambaHome_$ACCOUNT_ID]\n\tpath = $SAMBA_HOME" >> /tmp/smb.conf
-			rm -rf $SAMBA_HOME
-			mkdir $SAMBA_HOME
+
+#load the records of mounted folders, then umount them.
+			mount_folders=`ccfg_cli get smb"$ACCOUNT_ID"_mount@samba`
+			temp_idx=1
+			umount_folder=`echo "$mount_folders"  | cut -d ':' -f $temp_idx`
+			while [ "$umount_folder" != "" ]
+			do
+				echo UMOUNT: $temp_idx : $umount_folder
+				umount -f -l "$SAMBA_HOME/$umount_folder"
+				rmdir "$SAMBA_HOME/$umount_folder"
+				let temp_idx=temp_idx+1
+				umount_folder=`echo "$mount_folders"  | cut -d ':' -f $temp_idx`
+			done
+			ccfg_cli set smb"$ACCOUNT_ID"_mount@samba=''
+
+#			rm -rf $SAMBA_HOME
+			rmdir "$SAMBA_HOME"/*
+			mkdir "$SAMBA_HOME"
 
 if [ "${cfg_account}" != "#" ]; then
 adduser "${cfg_account}" -H -D
@@ -275,6 +331,12 @@ if [ "$cfg_shareAll" == "1" ]; then
 				mount_folder=${dev_name:2}
 				RealPath="/tmp/usb/"${mount_folder}
 				vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${part_id}`
+## To skip HFS or other unknown partition.
+				vol_type=`ccfg_cli -f "$VOL_INFO_FILE" get volType@disk${dev_id}_${part_id}`
+				if [ "${vol_type}" == "Unknown" ] || [ "${vol_type}" == "" ]; then
+					let part_id=$part_id+1
+					continue
+				fi
 
 #				ln -s ${RealPath} ${SAMBA_HOME}/Partition${part_id}
 				if [ "$vol_label" == "<no_label>" ]; then
@@ -300,15 +362,29 @@ else
 				temp_path=`echo "$cfg_path"  | cut -d '|' -f $counter`
 				if [ "$temp_path" != "" ]; then
 
+					dev_mount_num=`ccfg_cli -f "$VOL_INFO_FILE" get ${cfg_devname}_mount_num@volinfo`
 					temp_partition_idx=`echo "$cfg_partition_idx"  | cut -d '|' -f $counter`
 					dev_name=${cfg_devname}${temp_partition_idx}	#sdaX or sdbX
 					mount_folder=${dev_name:2}	# aX or bX
 					dev_id=`ccfg_cli -f "$VOL_INFO_FILE" get ${cfg_devname}_id@volinfo`
-					vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${counter}`
+
+					# To get the correct volLabel
+					part_id=1
+					while [ "${part_id}" -le "${dev_mount_num}" ];
+					do
+						dev_name_cmp=`ccfg_cli -f "$VOL_INFO_FILE" get devName@disk${dev_id}_${part_id}`
+						temp_vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${part_id}`
+						if [ "$dev_name_cmp" == "$dev_name" ]; then
+							vol_label=$temp_vol_label
+						fi
+						let part_id=part_id+1
+					done
+
+#					vol_label=`ccfg_cli -f "$VOL_INFO_FILE" get volLabel@disk${dev_id}_${temp_partition_idx}`
 					let temp_counter=$counter-1
 					display_name=`ccfg_cli get smb"$ACCOUNT_ID"_folder"$temp_counter"_display_name@samba`
 echo "vol_label = "$vol_label
-echo "display_name = "$display_name					
+echo "display_name = "$display_name
 
 					if [ "$vol_label" == "<no_label>" ]; then
 						if [ "$nolabel_count" == "0" ]; then
@@ -317,7 +393,7 @@ echo "display_name = "$display_name
 							let nolabel_count=$nolabel_count+2
 						else
 							#ln -s ${RealPath} ${SAMBA_HOME}/DATA-${nolabel_count}
-							vol_label="DATA"-${nolabel_count}							
+							vol_label="DATA"-${nolabel_count}
 							let nolabel_count=$nolabel_count+1
 						fi
 					fi
@@ -331,15 +407,23 @@ echo "display_name = "$display_name
 						smb_usermode_conf "$display_name" "${RealPath}"
 					else
 						cd $SAMBA_HOME
-						mkdir $vol_label 
+						mkdir "$vol_label"
 						cd $vol_label
 
 						if [ "$directory_type" == "1" ]; then
-							ln -s $RealPath $display_name
-							smb_usermode_conf "$vol_label" "$SAMBA_HOME/$vol_label"		
+#							ln -s $RealPath $display_name
+							mkdir "$display_name"
+
+#record mounted folders.
+							mount_folders=`ccfg_cli get smb"$ACCOUNT_ID"_mount@samba`
+							mount_folder_new=$vol_label/$display_name
+							ccfg_cli set smb"$ACCOUNT_ID"_mount@samba="$mount_folders""$mount_folder_new":
+
+							mount -o bind "$RealPath" "$SAMBA_HOME"/"$mount_folder_new"
+							smb_usermode_conf "$vol_label" "$SAMBA_HOME/$vol_label"
 						elif [ "$directory_type" == "2" ]; then
 							token_idx=2  # first token always is empty (ex: /xxx/yyy)
-							path_token=`echo "$temp_path"  | cut -d '/' -f $token_idx`						
+							path_token=`echo "$temp_path"  | cut -d '/' -f $token_idx`
 							while [ "$path_token" != "" ]
 							do
 								let token_idx=$token_idx+1
@@ -355,22 +439,22 @@ echo "display_name = "$display_name
 								path_token=$path_token_next
 							done
 						fi
-						
+
 						#To get the last string after '/' as sharing folder name ($path##*/)
 #						ln -s "$RealPath" "$SAMBA_HOME/${temp_path##*/}"
 
 						echo "RealPath : "$RealPath
 						echo "SAMBA_HOME : "$SAMBA_HOME
-						echo "temp_path : "$temp_path 
-#						echo "temp_path##*/ : "${temp_path##*/} 
+						echo "temp_path : "$temp_path
+#						echo "temp_path##*/ : "${temp_path##*/}
 #						echo "cfg_path : "$cfg_path
-#						echo "cfg_name : "$cfg_name 
+#						echo "cfg_name : "$cfg_name
 #						echo "mount_folder : "$mount_folder
 #						echo "dev_id : "${dev_id}
 #						echo "dev_name : "$dev_name
-#						echo "cfg_partition_idx : "${cfg_partition_idx}					
-#						echo "temp_partition_idx : "${temp_partition_idx}					
-					fi			
+#						echo "cfg_partition_idx : "${cfg_partition_idx}
+#						echo "temp_partition_idx : "${temp_partition_idx}
+					fi
 				fi
 			done
 fi

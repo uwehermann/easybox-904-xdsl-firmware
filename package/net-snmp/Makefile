@@ -192,6 +192,7 @@ ifdef CONFIG_PACKAGE_snmpd-static
 endif
 
 define Build/Compile
+	cp -f ./src/interface_linux.c $(PKG_BUILD_DIR)/agent/mibgroup/if-mib/data_access/
 	$(MAKE) -C $(PKG_BUILD_DIR) \
 		INSTALL_PREFIX="$(PKG_INSTALL_DIR)" \
 		LDFLAGS="$(TARGET_LDFLAGS) -lm -lc" \

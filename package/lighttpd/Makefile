@@ -280,11 +280,13 @@ endef
 
 define Package/lighttpd/conffiles
 /etc/lighttpd/lighttpd.conf
+/etc/lighttpd/lighttpdsameuser.conf
 endef
 
 define Package/lighttpd/install
 	$(INSTALL_DIR) $(1)/etc/lighttpd
 	$(INSTALL_DATA) ./files/lighttpd.conf $(1)/etc/lighttpd/
+	$(INSTALL_DATA) ./files/lighttpdsameuser.conf $(1)/etc/lighttpd/
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/lighttpd.init $(1)/etc/init.d/lighttpd
 	$(INSTALL_BIN) ./files/etc/init.d/webdav $(1)/etc/init.d/webdav
