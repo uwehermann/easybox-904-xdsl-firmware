@@ -411,9 +411,6 @@ export_dsl_scr()
 	echo 												>> ${ADSL_SCR}
 	echo '[WaitForConfiguration]={'						>> ${ADSL_SCR}
 #	echo 'g997xtusecs ' `echo ${xTSE} | sed 's/_/ /g'`	>> ${ADSL_SCR}
-	if [ "$xDSL_Mgmt_Mode" == "Auto" ] ; then
-		echo 'mfcs 2 0'									>> ${ADSL_SCR}
-	fi
 		echo 'llcs 0 1 0x1 0x1 0x1 0x1e116000 5'									>> ${ADSL_SCR}
 	echo '}'											>> ${ADSL_SCR}
 	echo 												>> ${ADSL_SCR}
@@ -434,11 +431,7 @@ export_dsl_scr()
 	echo 												>> ${VDSL_SCR}
 	echo '[WaitForConfiguration]={'						>> ${VDSL_SCR}
 #	echo 'g997xtusecs ' `echo ${xTSE} | sed 's/_/ /g'`	>> ${VDSL_SCR}
-	if [ "$xDSL_Mgmt_Mode" == "Auto" ] ; then
-		echo 'mfcs 1 1'								>> ${VDSL_SCR}
-	fi
 	echo 'llcs 0 1 0x1 0x1 0x1 0x1e116000 5'											>> ${VDSL_SCR}
-	echo 'dms 0x0045 0x0000 0x0002 0000 0004'											>> ${VDSL_SCR}
 	echo '}'											>> ${VDSL_SCR}
 	echo 												>> ${VDSL_SCR}
 	echo '[WaitForLinkActivate]={'						>> ${VDSL_SCR}

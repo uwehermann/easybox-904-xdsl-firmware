@@ -459,7 +459,7 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_MULTIMODE_FSM_STATUS" ] ; then
 		# DSL CLI interface, else save the above parameters to rc.conf and Reboot
 		if [ "$Next_xTM_Mode" = "PTM" ]; then
 			# Send the Multimode FSM to DSL Application with VDSL (=2 as NextMode)
-			/opt/ifx/bin/dsl_cpe_pipe.sh mfcs 2 $AdslSubPref
+			/opt/ifx/bin/dsl_cpe_pipe.sh mfcs 2
 		else
 			echo " ChangeMode from $Next_xDSL_Mode/$Next_xTM_Mode"
 ####			if [ "$platform" = "VR9" -o "$platform" = "AR9" -o "$platform" = "AMAZON_SE" ]; then
@@ -528,7 +528,7 @@ elif [ "$DSL_NOTIFICATION_TYPE" == "DSL_MULTIMODE_FSM_STATUS" ] ; then
 		### end
 
 		# Send the Multimode FSM to DSL Application with ADSL (=1 as NextMode)
-		/opt/ifx/bin/dsl_cpe_pipe.sh mfcs 1 $AdslSubPref
+		/opt/ifx/bin/dsl_cpe_pipe.sh mfcs 1
 	fi
 	echo "DSL NEXT MODE = $DSL_NEXT_MODE"
 	echo "ADSL SUB PREF = $DSL_ADSL_SUB_PREF"
