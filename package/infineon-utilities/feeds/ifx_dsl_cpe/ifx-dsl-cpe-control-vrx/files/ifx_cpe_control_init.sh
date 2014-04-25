@@ -890,6 +890,8 @@ echo "[ifx_cpe_control_init.sh start] wanphy_phymode=0" >> $OUT_FILE
          ${BIN_DIR}/dsl_cpe_pipe.sh acs 0
          sleep 1
          ${BIN_DIR}/dsl_cpe_pipe.sh acs 1
+	### Work Around for Bootup sometimes would stuck in PPE init.
+	sleep 1 # workaround by Maxx_chen for GF001 Bad unit
       fi
    fi
 }

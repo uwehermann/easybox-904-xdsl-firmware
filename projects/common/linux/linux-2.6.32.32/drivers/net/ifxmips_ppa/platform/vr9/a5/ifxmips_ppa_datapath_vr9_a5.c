@@ -86,6 +86,10 @@
 #include <linux/errno.h>
 #include <net/xfrm.h>
 
+/* Terry 20131115, for IP options */
+#include <linux/ip.h>
+#include <linux/if_ether.h>
+
 /*
  *  Chip Specific Head File
  */
@@ -1980,6 +1984,153 @@ EXPORT_SYMBOL(remove_isolation_mac);
 EXPORT_SYMBOL(query_isolation_mac);
 #endif
 // end Wireless chip uses one of switch port to send and receive data from CPU.
+
+/* Terry 20131114, make ip a IP option to hide switch port information. */
+#define	IP_OPT_LEN	4	/* 4*4 bytes */
+/*
+ * 0. swport - LTQ switch port.
+ * 1. rtlswport - RTL switch port.
+ * 2. brport - Bridge port.
+ * 3. brifindex - Bridge interface index.
+ */
+static int *create_igmp_ip_option(struct sk_buff *skb, struct iphdr **iph)
+{
+	struct ethhdr *ethh = (struct ethhdr *)skb->data;
+	char *mv_src, *mv_dst;
+	int mv_len, i, *new_ip_opt, is_8021q = 0, ethh_len = 0;;
+	char *new_ip_opt_c;
+
+	/* Check 802.1Q */
+	if (ethh->h_proto == ntohs(ETH_P_8021Q))
+		is_8021q = 1;
+	
+	if (is_8021q == 1) {
+		struct Ehdr_1Q  *ehdr = (struct Ehdr_1Q *)skb->data;
+		
+		*iph = (struct iphdr *)(((char *)skb->data) + sizeof(struct Ehdr_1Q));
+		ethh_len = sizeof(struct Ehdr_1Q);
+		
+		if (ehdr->type != ntohs(ETH_P_IP)) /* IP */
+			return NULL;
+	} else {
+		*iph = (struct iphdr *)(((char *)skb->data) + sizeof(struct ethhdr));
+		ethh_len = sizeof(struct ethhdr);
+		
+		if (ethh->h_proto != ntohs(ETH_P_IP)) /* IP */
+			return NULL;
+	}
+
+	if ((*iph)->protocol != 0x02) /* IGMP */
+		return NULL;
+
+	/* Make sure the space is enough */
+	if ((*iph)->version != 4 || ((*iph)->ihl + (IP_OPT_LEN + 1)) > 0xf)
+		return NULL;
+
+	/* Move data */
+	new_ip_opt = (int *)(((int)(*iph)) + (*iph)->ihl * 4);
+	mv_src = (char *)new_ip_opt;
+	if (skb_put(skb, (IP_OPT_LEN + 1) * 4) != NULL) {
+		mv_len = skb->len - (ethh_len + (*iph)->ihl * 4);
+		mv_dst = mv_src + (IP_OPT_LEN + 1) * 4;
+		memmove(mv_dst, mv_src, mv_len);
+		/* Update IP header */
+		(*iph)->ihl += (IP_OPT_LEN + 1);
+		(*iph)->tot_len += (IP_OPT_LEN + 1) * 4;
+		/* Reset options */
+		new_ip_opt[0] = 0;
+		new_ip_opt_c = (char *)&new_ip_opt[0]; 
+		new_ip_opt_c[0] = 0x7F; /* Reserved */
+		new_ip_opt_c[1] = (IP_OPT_LEN + 1) * 4;
+		for (i = 1; i < IP_OPT_LEN; i++)
+			new_ip_opt[i] = -1;
+	} else {
+		skb_pull(skb, (IP_OPT_LEN + 1) * 4);
+		return NULL;
+	}
+
+	return &new_ip_opt[1];
+}
+
+void cksum_igmp_ip_option(struct sk_buff *skb, struct iphdr *iph)
+{
+	ip_send_check(iph);
+}
+
+/* Terry 20131111, duplicate RTL APIs since it's not GPL */
+#if 1
+#define RTK_EGRESS_PKT_HEADER_LEN			8
+
+typedef struct _rtk_cpu_egress_pkt_header_t
+{
+    unsigned int u32EthTypeHi					:8;		/* Realtek EtherType (16-bits) [0x8899] */
+	unsigned int u32EthTypeLo					:8;		/* Realtek EtherType (16-bits) [0x8899] */
+    unsigned int u32Protocol					:8;  	/* Protocol (8-bit) */
+    unsigned int u32Reason						:8;		/* Reason */
+    unsigned int u32EFID							:1; 	/* EFID */
+    unsigned int u32EnhancedFID				:3; 	/* Enhanced FID */
+	unsigned int u32PriSelect  				:1;		/* Priority Select */
+    unsigned int u32Priority					:3; 	/* Priority */
+    unsigned int u32Keep							:1; 	/* Keep */
+    unsigned int u32VSEL							:1; 	/* VSEL */
+    unsigned int u32DisableLearning		:1; 	/* Disable Learning */
+    unsigned int u32VIDX							:5; 	/* VIDX */
+	unsigned int u32Rev1							:8;		/* Reserved */
+	unsigned int u32Rev2							:4;		/* Reserved */
+	unsigned int u32PortNo            :4;		/* Port mask TX/SPA Rx(PortNo bits, LSB 4-bits) */
+} RTK_CPU_EGRESS_PKT_HEADER;
+
+int RTL_Get_CPUPort_StripTag(struct sk_buff *pstSkb, unsigned char *pu8PortNo)
+{
+	RTK_CPU_EGRESS_PKT_HEADER gstCurrRtkEgressHdr;
+	unsigned char *pu8PktHdr;
+	unsigned char *pu8EgressPktHdr = (unsigned char *)&gstCurrRtkEgressHdr;
+	unsigned char u8Shift = 16; /* DST*6:SRC*6:802.1Q*4:RTL*8 */
+	unsigned char *pu8Dest, *pu8Src;
+	int i;
+	
+	pu8PktHdr = (unsigned char *)pstSkb->data + u8Shift;
+	for (i = 0; i < 2; i++) {
+		/* Check CPUPort Tag */
+		if ((pu8PktHdr[0] == 0x88) && (pu8PktHdr[1] == 0x99) && (pu8PktHdr[2] == 0x04)) {
+			//dprintf("[%s] Got RTK CPU-Port Tag!\n", __FUNCTION__);
+			break;
+		}
+
+		u8Shift -= 4;
+		pu8PktHdr -= 4;
+
+		/* Got no CPUPort Tag */
+		if (u8Shift < 12) {
+			*pu8PortNo = 255;
+			// printk("[%s] Get RTL CPU Hdr failed.\n", __FUNCTION__);
+			return -1;
+		}
+	}
+
+	/* Capture CPUtag format into gstCurrRtkEgressHdr */
+	for (i = 0; i < RTK_EGRESS_PKT_HEADER_LEN; i++) {
+		*pu8EgressPktHdr++ = pu8PktHdr[i];
+	}
+	
+	*pu8PortNo = (unsigned char)(gstCurrRtkEgressHdr.u32PortNo & 0x0F);
+	
+	// General Code ============================================ // 
+	pu8Src = (char *)pstSkb->data;
+	/* Terry 20131112, need to add RTL head length. (Offset 8 bytes) */
+	pu8Dest = (char *)(pstSkb->data + RTK_EGRESS_PKT_HEADER_LEN);
+	
+	/* Shift */
+	for (i = (u8Shift - 1); i >= 0; i--) {
+		pu8Dest[i] = pu8Src[i];
+	}
+	
+	skb_pull(pstSkb, RTK_EGRESS_PKT_HEADER_LEN);
+	
+	return 0;
+}
+#endif
+
 
 // start to drop flooding packet, bitonic
 #include "../pkt_flooding.c"
@@ -4715,6 +4866,10 @@ static INLINE int dma_rx_int_handler(struct dma_device_info *dma_dev)
 	// To find source physical switch port
 	cpu_egress_pkt_header_t eg_pkt_hdr;
 	unsigned char source_port;
+	/* Terry 20131111, For RTL switch to get port info for IGMP snooping */
+	unsigned char rtl_source_port;
+	int *ip_opt_ptr = NULL;
+	struct iphdr *iph = NULL;
 	unsigned char bFromWireless = 0;
 	u32*	pPtr;
 	struct Ehdr_1Q  *ehdr = NULL;
@@ -4755,6 +4910,11 @@ static INLINE int dma_rx_int_handler(struct dma_device_info *dma_dev)
     eg_pkt_hdr = *((cpu_egress_pkt_header_t *)(skb->data-8));
 	source_port = (eg_pkt_hdr.SPPID) & 0x7 ;
 	// end of bitonic add
+	
+/* Terry 20131108, To pass rtl switch port information in MCAST packets */
+#if 1
+	RTL_Get_CPUPort_StripTag(skb, &rtl_source_port);
+#endif
 
     //  implement indirect fast path
     if ( header->acc_done && header->dest_list )        //  acc_done == 1 && dest_list != 0
@@ -4991,12 +5151,31 @@ static INLINE int dma_rx_int_handler(struct dma_device_info *dma_dev)
 				else
 					ebt_log_packet( skb, 0, 0, 0, 0, 0, vlan_id );
 #endif
+/* Terry 20131108, To pass rtl switch port information in MCAST packets */
+#if 1
+				ip_opt_ptr = create_igmp_ip_option(skb, &iph);
+#endif
+				
                 skb->protocol = eth_type_trans(skb, g_eth_net_dev[off]);
             }
           #if 0  // bitonic added, ctc merged
             // Get the source ip and mac address of multicast packets
             set_multicast_source_mac_address_to_arp_table(skb);
           #endif // end of bitonic
+		  
+#if 1
+			if (ip_opt_ptr != NULL && iph != NULL) {
+				/* Terry 20130515, pass physical port information to userspace by skb */
+				if (source_port != 255)
+					ip_opt_ptr[0] = source_port;
+  #if 1
+				/* Terry 20131108, To pass rtl switch port information in MCAST packets */
+				if (rtl_source_port !=  255)
+					ip_opt_ptr[1] = rtl_source_port;
+  #endif
+				cksum_igmp_ip_option(skb, iph);
+			}
+#endif
 
             if ( netif_rx(skb) == NET_RX_DROP )
             {
